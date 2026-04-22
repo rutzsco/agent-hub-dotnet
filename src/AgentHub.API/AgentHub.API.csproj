@@ -7,11 +7,18 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Azure.AI.Projects" Version="2.0.0" />
-    <PackageReference Include="Azure.Identity" Version="1.20.0" />
+    <PackageReference Include="Azure.AI.Extensions.OpenAI" Version="2.1.0-beta.1" />
+    <PackageReference Include="Azure.AI.Projects" Version="2.1.0-beta.1" />
+    <PackageReference Include="Azure.AI.Projects.Agents" Version="2.1.0-beta.1" />
+    <PackageReference Include="Azure.Identity" Version="1.21.0" />
     <PackageReference Include="Microsoft.Agents.AI.Foundry" Version="1.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.6" />
     <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="10.1.7" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AgentHub.Persistence\AgentHub.Persistence.csproj" />
+    <ProjectReference Include="..\AgentHub.SessionState\AgentHub.SessionState.csproj" />
   </ItemGroup>
 
 </Project>
