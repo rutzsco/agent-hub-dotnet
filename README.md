@@ -68,18 +68,23 @@ This means the conversation can survive process restarts as long as PostgreSQL h
 
 1. On startup, the API resolves or creates a Foundry memory store (persists in Azure)
 2. On startup, the API resolves or creates a dedicated Foundry memory agent
-3. On startup, an in-memory session cache is initialized (keyed by `userId`, thread-safe)
+3. On startup, an in-memory session cache (with local turn buffer) and an operation cache are initialized
 4. Requests include `message` and `userId`
 5. The route checks the session cache for the `userId`:
-   - **Cache hit** — reuses the existing `AgentSession`, continuing the conversation thread
-   - **Cache miss** — creates a new `AgentSession`, caches it by `userId` for future requests
-6. Foundry's memory store reads and writes user context scoped to the `userId`
+   - **Cache hit (returning user)** — reuses the existing `AgentSession`. Recent conversation turns (last 10) are read from the local turn buffer and used as context. **No Foundry memory search is performed** — this is the fast path.
+   - **Cache miss (first request or after restart)** — creates a new `AgentSession`, caches it, and performs a one-time `SearchMemoriesAsync` call to bootstrap long-term context from Foundry.
+6. **Run** — The agent processes the user message (with local turn history or Foundry memory context) and produces a response.
+7. **Local cache** — The user/assistant turn is appended to a bounded ring buffer (last 10 turns per user).
+8. **Fire-and-forget update** — The route returns the response immediately, then persists the turn to Foundry memory in the background without blocking. Failures are logged but do not affect the user response.
+9. Search and update operation IDs are tracked per `userId` in the operation cache so Foundry can chain incremental updates.
 
-**Two layers of persistence:**
+**Three layers of state:**
 
 | Layer | Scope | Survives app restart? | Backed by |
 |-------|-------|-----------------------|-----------|
 | Session cache | In-memory per `userId` | No | RAM (thread-safe `ConcurrentDictionary`) |
+| Local turn buffer | In-memory per `userId`, last 10 turns | No | RAM (bounded ring buffer) |
+| Operation cache | In-memory per `userId` | No | RAM (tracks search/update IDs for chaining) |
 | Foundry memory store | Long-term per `userId` | **Yes** | Azure AI Foundry |
 
 When the app restarts, the session cache is cleared. However, Foundry's memory store retains long-term context (user profile, chat summaries) from all previous sessions and makes it available to the agent on the next request.
@@ -92,6 +97,7 @@ This path does not use the PostgreSQL conversation pipeline.
 - An Azure AI Foundry project with a deployed model
 - Azure sign-in available to `DefaultAzureCredential` such as `az login`
 - A PostgreSQL server reachable from the API
+- For `foundryMemoryAgent`: the Foundry project's managed identity must have the **Cognitive Services OpenAI User** role on the Azure OpenAI resource hosting the `text-embedding-3-small` deployment
 
 ## Configuration
 
