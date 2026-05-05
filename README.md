@@ -314,6 +314,7 @@ Tables created:
 
 - `conversations`
 - `conversation_messages`
+- `memory_deletion_audit`
 
 Each message is stored with:
 
@@ -321,6 +322,14 @@ Each message is stored with:
 - role
 - content
 - timestamp
+
+### Memory Audit Schema Update
+
+For existing databases that already have `memory_deletion_audit` but do not yet include the `audit_message` column, run:
+
+`src/AgentHub.Persistence/sql/20260505_add_audit_message_to_memory_deletion_audit.sql`
+
+This migration is idempotent and safe to run multiple times.
 
 ## Logging
 

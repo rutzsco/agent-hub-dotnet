@@ -1,8 +1,6 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/AgentHub.API/AgentHub.API.csproj" />
-    <Project Path="src/AgentHub.Persistence/AgentHub.Persistence.csproj" />
-    <Project Path="src/AgentHub.SessionState/AgentHub.SessionState.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/AgentHub.Tests/AgentHub.Tests.csproj" />

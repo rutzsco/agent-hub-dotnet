@@ -21,6 +21,7 @@ public class PostgresMemoryAuditRepositoryTests
         await repository.LogMemoryDeletionAsync(
             userId: "user123",
             memoryStoreName: "test-store",
+            auditMessage: "Memory deletion initiated by user",
             wasSuccessful: true,
             errorMessage: null);
 
@@ -30,6 +31,7 @@ public class PostgresMemoryAuditRepositoryTests
         var entry = history.First();
         Assert.Equal("user123", entry.UserId);
         Assert.Equal("test-store", entry.MemoryStoreName);
+        Assert.Equal("Memory deletion initiated by user", entry.AuditMessage);
         Assert.True(entry.WasSuccessful);
         Assert.Null(entry.ErrorMessage);
     }
@@ -47,6 +49,7 @@ public class PostgresMemoryAuditRepositoryTests
         await repository.LogMemoryDeletionAsync(
             userId: "user456",
             memoryStoreName: "test-store",
+            auditMessage: "Memory deletion failed - connection issue",
             wasSuccessful: false,
             errorMessage: "Connection timeout");
 
@@ -69,11 +72,11 @@ public class PostgresMemoryAuditRepositoryTests
         var userId = $"user-{Guid.NewGuid()}";
 
         // Act - log multiple deletions
-        await repository.LogMemoryDeletionAsync(userId, "store1", true);
+        await repository.LogMemoryDeletionAsync(userId, "store1", "First deletion attempt", true);
         await Task.Delay(10); // Small delay to ensure different timestamps
-        await repository.LogMemoryDeletionAsync(userId, "store2", true);
+        await repository.LogMemoryDeletionAsync(userId, "store2", "Second deletion attempt", true);
         await Task.Delay(10);
-        await repository.LogMemoryDeletionAsync(userId, "store3", false, "Test error");
+        await repository.LogMemoryDeletionAsync(userId, "store3", "Third deletion failed", false, "Test error");
 
         var history = await repository.GetUserDeletionHistoryAsync(userId);
 

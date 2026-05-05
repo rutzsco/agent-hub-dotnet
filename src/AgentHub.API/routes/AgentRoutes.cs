@@ -362,10 +362,32 @@ public static partial class AgentRoutes
             {
                 var result = await auditService.DeleteAsync(userId, cancellationToken);
                 
+                // Check if deletion was actually successful
+                if (!result.FoundryScopeDeleted)
+                {
+                    var errorMsg = $"Failed to delete memory scope for user {userId}. User may not exist or scope not found.";
+                    logger.LogWarning("Memory deletion failed. UserId={UserId}, FoundryDeleted={FoundryDeleted}", 
+                        userId, result.FoundryScopeDeleted);
+                    
+                    // Log failed deletion to audit trail for compliance
+                    var auditMessage = $"Attempted memory deletion for non-existent user or empty scope";
+                    await auditRepository.LogMemoryDeletionAsync(
+                        userId,
+                        "foundry-memory",
+                        auditMessage,
+                        wasSuccessful: false,
+                        errorMessage: errorMsg,
+                        cancellationToken);
+
+                    return Results.BadRequest(new { error = errorMsg, result });
+                }
+
                 // Log successful deletion to audit trail
+                var successMessage = $"Memory scope successfully deleted";
                 await auditRepository.LogMemoryDeletionAsync(
                     userId,
                     "foundry-memory",
+                    successMessage,
                     wasSuccessful: true,
                     errorMessage: null,
                     cancellationToken);
@@ -378,12 +400,14 @@ public static partial class AgentRoutes
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Memory deletion failed. UserId={UserId}", userId);
+                logger.LogError(ex, "Memory deletion failed with exception. UserId={UserId}", userId);
                 
                 // Log failed deletion to audit trail for compliance
+                var errorAuditMessage = $"Memory deletion error: {ex.GetType().Name}";
                 await auditRepository.LogMemoryDeletionAsync(
                     userId,
                     "foundry-memory",
+                    errorAuditMessage,
                     wasSuccessful: false,
                     errorMessage: ex.Message,
                     cancellationToken);

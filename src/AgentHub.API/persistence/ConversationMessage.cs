@@ -15,6 +15,7 @@ public sealed record MemoryDeletionAuditEntry(
     long Id,
     string UserId,
     string MemoryStoreName,
+    string AuditMessage,
     bool WasSuccessful,
     string? ErrorMessage,
     DateTimeOffset CreatedAt);
@@ -30,6 +31,7 @@ public interface IMemoryAuditRepository
     Task LogMemoryDeletionAsync(
         string userId,
         string memoryStoreName,
+        string auditMessage,
         bool wasSuccessful,
         string? errorMessage = null,
         CancellationToken cancellationToken = default);

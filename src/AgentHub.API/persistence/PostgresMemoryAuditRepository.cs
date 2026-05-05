@@ -31,6 +31,7 @@ public sealed class PostgresMemoryAuditRepository : IMemoryAuditRepository
     public async Task LogMemoryDeletionAsync(
         string userId,
         string memoryStoreName,
+        string auditMessage,
         bool wasSuccessful,
         string? errorMessage = null,
         CancellationToken cancellationToken = default)
@@ -38,14 +39,14 @@ public sealed class PostgresMemoryAuditRepository : IMemoryAuditRepository
         await EnsureInitializedAsync(cancellationToken);
 
         const string sql = """
-            INSERT INTO memory_deletion_audit (user_id, memory_store_name, was_successful, error_message, created_at)
-            VALUES (@userId, @memoryStoreName, @wasSuccessful, @errorMessage, @createdAt)
+            INSERT INTO memory_deletion_audit (user_id, memory_store_name, audit_message, was_successful, error_message, created_at)
+            VALUES (@userId, @memoryStoreName, @auditMessage, @wasSuccessful, @errorMessage, @createdAt)
             RETURNING id;
             """;
 
         _logger.LogDebug(
-            "Logging memory deletion. UserId={UserId}, MemoryStore={MemoryStore}, Success={Success}",
-            userId, memoryStoreName, wasSuccessful);
+            "Logging memory deletion. UserId={UserId}, MemoryStore={MemoryStore}, Success={Success}, Message={Message}",
+            userId, memoryStoreName, wasSuccessful, auditMessage);
 
         try
         {
@@ -55,6 +56,7 @@ public sealed class PostgresMemoryAuditRepository : IMemoryAuditRepository
             await using var command = new NpgsqlCommand(sql, connection);
             command.Parameters.AddWithValue("@userId", userId);
             command.Parameters.AddWithValue("@memoryStoreName", memoryStoreName);
+            command.Parameters.AddWithValue("@auditMessage", auditMessage);
             command.Parameters.AddWithValue("@wasSuccessful", wasSuccessful);
             command.Parameters.AddWithValue("@errorMessage", (object?)errorMessage ?? DBNull.Value);
             command.Parameters.AddWithValue("@createdAt", DateTimeOffset.UtcNow);
@@ -81,7 +83,7 @@ public sealed class PostgresMemoryAuditRepository : IMemoryAuditRepository
         await EnsureInitializedAsync(cancellationToken);
 
         const string sql = """
-            SELECT id, user_id, memory_store_name, was_successful, error_message, created_at
+            SELECT id, user_id, memory_store_name, audit_message, was_successful, error_message, created_at
             FROM memory_deletion_audit
             WHERE user_id = @userId
             ORDER BY created_at DESC;
@@ -106,9 +108,10 @@ public sealed class PostgresMemoryAuditRepository : IMemoryAuditRepository
                     Id: reader.GetInt64(0),
                     UserId: reader.GetString(1),
                     MemoryStoreName: reader.GetString(2),
-                    WasSuccessful: reader.GetBoolean(3),
-                    ErrorMessage: reader.IsDBNull(4) ? null : reader.GetString(4),
-                    CreatedAt: reader.GetFieldValue<DateTimeOffset>(5)));
+                    AuditMessage: reader.GetString(3),
+                    WasSuccessful: reader.GetBoolean(4),
+                    ErrorMessage: reader.IsDBNull(5) ? null : reader.GetString(5),
+                    CreatedAt: reader.GetFieldValue<DateTimeOffset>(6)));
             }
 
             _logger.LogInformation(
@@ -151,6 +154,7 @@ public sealed class PostgresMemoryAuditRepository : IMemoryAuditRepository
                     id BIGSERIAL PRIMARY KEY,
                     user_id TEXT NOT NULL,
                     memory_store_name TEXT NOT NULL,
+                    audit_message TEXT NOT NULL,
                     was_successful BOOLEAN NOT NULL,
                     error_message TEXT,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

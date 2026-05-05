@@ -16,8 +16,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\AgentHub.API\AgentHub.API.csproj" />
-    <ProjectReference Include="..\..\src\AgentHub.SessionState\AgentHub.SessionState.csproj" />
-    <ProjectReference Include="..\..\src\AgentHub.Persistence\AgentHub.Persistence.csproj" />
   </ItemGroup>
 
 </Project>
