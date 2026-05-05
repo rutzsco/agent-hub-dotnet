@@ -45,6 +45,13 @@ public static partial class AgentRoutes
             return new MemoryAuditService(memoryContext, logger);
         });
 
+        services.AddSingleton<IMemoryAuditRepository>(serviceProvider =>
+        {
+            var postgresOptions = serviceProvider.GetRequiredService<PostgresConversationOptions>();
+            var logger = serviceProvider.GetRequiredService<ILoggerFactory>().CreateLogger<PostgresMemoryAuditRepository>();
+            return new PostgresMemoryAuditRepository(postgresOptions, logger);
+        });
+
         return services;
     }
 
@@ -339,10 +346,11 @@ public static partial class AgentRoutes
         app.MapDelete("/users/{userId}/memory", async (
             string userId,
             MemoryAuditService auditService,
+            IMemoryAuditRepository auditRepository,
             ILoggerFactory loggerFactory,
             CancellationToken cancellationToken) =>
         {
-            var logger = loggerFactory.CreateLogger("AgentHub.MemoryAuditRoute");
+            var logger = loggerFactory.CreateLogger("AgentHub.MemoryDeleteRoute");
 
             if (!UserIdPattern().IsMatch(userId))
             {
@@ -350,8 +358,38 @@ public static partial class AgentRoutes
                 return Results.BadRequest("Invalid userId format.");
             }
 
-            var result = await auditService.DeleteAsync(userId, cancellationToken);
-            return Results.Ok(result);
+            try
+            {
+                var result = await auditService.DeleteAsync(userId, cancellationToken);
+                
+                // Log successful deletion to audit trail
+                await auditRepository.LogMemoryDeletionAsync(
+                    userId,
+                    "foundry-memory",
+                    wasSuccessful: true,
+                    errorMessage: null,
+                    cancellationToken);
+
+                logger.LogInformation(
+                    "Memory deletion completed and audited. UserId={UserId}, FoundryDeleted={FoundryDeleted}, LocalCacheCleared={LocalCacheCleared}",
+                    userId, result.FoundryScopeDeleted, result.LocalCacheCleared);
+
+                return Results.Ok(result);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Memory deletion failed. UserId={UserId}", userId);
+                
+                // Log failed deletion to audit trail for compliance
+                await auditRepository.LogMemoryDeletionAsync(
+                    userId,
+                    "foundry-memory",
+                    wasSuccessful: false,
+                    errorMessage: ex.Message,
+                    cancellationToken);
+
+                throw;
+            }
         });
 
         app.MapGet("/conversations/{conversationId:guid}/history", async (
