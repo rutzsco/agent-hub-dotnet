@@ -78,6 +78,20 @@ public sealed class FoundryMemorySessionCache
     }
 
     public int GetActiveCacheSize() => _sessionCache.Count;
+
+    /// <summary>
+    /// Removes all cached session and turn data for the given userId.
+    /// Returns true if any data was present and removed.
+    /// </summary>
+    public bool ClearUser(string userId)
+    {
+        var removedSession = _sessionCache.TryRemove(userId, out _);
+        var removedTurns = _turnCache.TryRemove(userId, out _);
+        _logger.LogDebug(
+            "Cleared local session cache for userId={UserId}. SessionRemoved={SessionRemoved}, TurnsRemoved={TurnsRemoved}",
+            userId, removedSession, removedTurns);
+        return removedSession || removedTurns;
+    }
 }
 
 /// <summary>
@@ -169,6 +183,17 @@ public sealed class FoundryMemoryOperationCache
         {
             _updateIds[scope] = updateId;
         }
+    }
+
+    /// <summary>
+    /// Removes all cached search and update IDs for the given scope (userId).
+    /// Returns true if any data was present and removed.
+    /// </summary>
+    public bool ClearUser(string scope)
+    {
+        var removedSearch = _searchIds.TryRemove(scope, out _);
+        var removedUpdate = _updateIds.TryRemove(scope, out _);
+        return removedSearch || removedUpdate;
     }
 }
 

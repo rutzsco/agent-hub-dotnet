@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using AgentHub.API.Agents;
+using AgentHub.API.Services;
 using AgentHub.Persistence;
 using AgentHub.SessionState;
 using Microsoft.Agents.AI;
@@ -35,6 +36,13 @@ public static partial class AgentRoutes
             logger.LogInformation("Registering Foundry memory agent with memory store and in-memory session cache.");
             logger.LogDebug("Session cache: userId-keyed, thread-safe, survives app lifetime (lost on restart). Memory store: persists in Azure beyond restarts.");
             return FoundryMemoryAgent.CreateAsync(settings, logger).GetAwaiter().GetResult();
+        });
+
+        services.AddSingleton(serviceProvider =>
+        {
+            var memoryContext = serviceProvider.GetRequiredService<FoundryMemoryContext>();
+            var logger = serviceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("AgentHub.MemoryAuditService");
+            return new MemoryAuditService(memoryContext, logger);
         });
 
         return services;
@@ -135,10 +143,14 @@ public static partial class AgentRoutes
         app.MapPost("/agents/foundryMemoryAgent", async (
             FoundryMemoryContext memoryContext,
             MemoryAgentRequest request,
+            HttpContext httpContext,
             ILoggerFactory loggerFactory,
             CancellationToken cancellationToken) =>
         {
             var logger = loggerFactory.CreateLogger("AgentHub.FoundryMemoryAgentRoute");
+            
+            // Set userId in request header so agent framework scopes all memory operations to this user
+            httpContext.Request.Headers["x-memory-user-id"] = request.UserId;
             logger.LogInformation(
                 "Received Foundry memory agent request. UserId={UserId}, MessageLength={MessageLength}",
                 request.UserId,
@@ -146,28 +158,10 @@ public static partial class AgentRoutes
             logger.LogDebug("Request details: Message={Message}\n[Isolation: No PostgreSQL, uses Foundry memory store + session cache]", 
                 request.Message);
 
-            if (string.IsNullOrWhiteSpace(request.Message))
+            var validationResult = ValidateFoundryMemoryRequest(request, logger);
+            if (validationResult is not null)
             {
-                logger.LogWarning("Foundry memory agent request rejected due to empty message. UserId={UserId}", request.UserId);
-                return Results.BadRequest("Message is required.");
-            }
-
-            if (request.Message.Length > 4000)
-            {
-                logger.LogWarning("Foundry memory agent request rejected. Message too long: {Length} chars. UserId={UserId}", request.Message.Length, request.UserId);
-                return Results.BadRequest("Message must not exceed 4000 characters.");
-            }
-
-            if (string.IsNullOrWhiteSpace(request.UserId))
-            {
-                logger.LogWarning("Foundry memory agent request rejected due to missing userId.");
-                return Results.BadRequest("UserId is required.");
-            }
-
-            if (request.UserId.Length > 128 || !UserIdPattern().IsMatch(request.UserId))
-            {
-                logger.LogWarning("Foundry memory agent request rejected due to invalid userId format.");
-                return Results.BadRequest("UserId must be alphanumeric (dots, hyphens, underscores allowed), max 128 characters.");
+                return validationResult;
             }
 
             logger.LogDebug("Validation passed. UserId={UserId}, proceeding to session cache lookup", request.UserId);
@@ -279,7 +273,18 @@ public static partial class AgentRoutes
             var responseText = response.ToString();
             memoryContext.SessionCache.AppendTurn(request.UserId, request.Message, responseText, queryEmbedding);
 
-            // Fire-and-forget: persist to Foundry memory without blocking the response
+            // CRITICAL: Scrub sensitive data before storing in memory
+            var scrubResult = SensitiveDataScrubber.ScrubMessagePair(request.Message, responseText);
+
+            if (scrubResult.HasSensitiveData)
+            {
+                logger.LogWarning(
+                    "Sensitive data detected and redacted before memory update. UserId={UserId}, DetectedTypes={DetectedTypes}",
+                    request.UserId,
+                    string.Join(", ", scrubResult.DetectedTypes));
+            }
+
+            // Fire-and-forget: persist scrubbed content to Foundry memory without blocking the response
             _ = Task.Run(async () =>
             {
                 try
@@ -289,8 +294,8 @@ public static partial class AgentRoutes
                         memoryContext.MemoryStoreName,
                         memoryContext.OperationCache,
                         request.UserId,
-                        request.Message,
-                        responseText,
+                        scrubResult.ScrubbedUserMessage,
+                        scrubResult.ScrubbedAssistantResponse,
                         logger,
                         CancellationToken.None);
                 }
@@ -305,7 +310,48 @@ public static partial class AgentRoutes
                 request.UserId,
                 responseText.Length);
 
-            return Results.Ok(new MemoryAgentRunResult(request.UserId, responseText));
+            var sensitiveDataWarning = scrubResult.HasSensitiveData
+                ? $"Note: Sensitive data ({string.Join(", ", scrubResult.DetectedTypes)}) was detected in this conversation and has been redacted before being stored in memory."
+                : null;
+
+            return Results.Ok(new MemoryAgentRunResult(request.UserId, responseText, sensitiveDataWarning));
+        });
+
+        app.MapGet("/users/{userId}/memory", async (
+            string userId,
+            MemoryAuditService auditService,
+            string? topic,
+            ILoggerFactory loggerFactory,
+            CancellationToken cancellationToken) =>
+        {
+            var logger = loggerFactory.CreateLogger("AgentHub.MemoryAuditRoute");
+
+            if (!UserIdPattern().IsMatch(userId))
+            {
+                logger.LogWarning("Invalid userId format in memory inspect request. UserId={UserId}", userId);
+                return Results.BadRequest("Invalid userId format.");
+            }
+
+            var result = await auditService.InspectAsync(userId, topic, cancellationToken);
+            return Results.Ok(result);
+        });
+
+        app.MapDelete("/users/{userId}/memory", async (
+            string userId,
+            MemoryAuditService auditService,
+            ILoggerFactory loggerFactory,
+            CancellationToken cancellationToken) =>
+        {
+            var logger = loggerFactory.CreateLogger("AgentHub.MemoryAuditRoute");
+
+            if (!UserIdPattern().IsMatch(userId))
+            {
+                logger.LogWarning("Invalid userId format in memory delete request. UserId={UserId}", userId);
+                return Results.BadRequest("Invalid userId format.");
+            }
+
+            var result = await auditService.DeleteAsync(userId, cancellationToken);
+            return Results.Ok(result);
         });
 
         app.MapGet("/conversations/{conversationId:guid}/history", async (
@@ -360,6 +406,44 @@ public static partial class AgentRoutes
             messages,
             agentSession,
             cancellationToken: cancellationToken);
+    }
+
+    /// <summary>
+    /// Validates the incoming Foundry memory agent request payload.
+    /// Returns a BadRequest result when validation fails; otherwise returns null.
+    /// </summary>
+    /// <param name="request">The incoming memory agent request to validate.</param>
+    /// <param name="logger">Logger used to emit validation failure details.</param>
+    /// <returns>
+    /// An <see cref="IResult"/> representing a validation error response when invalid; otherwise null.
+    /// </returns>
+    private static IResult? ValidateFoundryMemoryRequest(MemoryAgentRequest request, ILogger logger)
+    {
+        if (string.IsNullOrWhiteSpace(request.Message))
+        {
+            logger.LogWarning("Foundry memory agent request rejected due to empty message. UserId={UserId}", request.UserId);
+            return Results.BadRequest("Message is required.");
+        }
+
+        if (request.Message.Length > 4000)
+        {
+            logger.LogWarning("Foundry memory agent request rejected. Message too long: {Length} chars. UserId={UserId}", request.Message.Length, request.UserId);
+            return Results.BadRequest("Message must not exceed 4000 characters.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.UserId))
+        {
+            logger.LogWarning("Foundry memory agent request rejected due to missing userId.");
+            return Results.BadRequest("UserId is required.");
+        }
+
+        if (request.UserId.Length > 128 || !UserIdPattern().IsMatch(request.UserId))
+        {
+            logger.LogWarning("Foundry memory agent request rejected due to invalid userId format.");
+            return Results.BadRequest("UserId must be alphanumeric (dots, hyphens, underscores allowed), max 128 characters.");
+        }
+
+        return null;
     }
 
 #pragma warning disable AAIP001
@@ -467,6 +551,6 @@ public record AgentRunResult(Guid ConversationId, string Response);
 
 public record MemoryAgentRequest(string Message, string UserId);
 
-public record MemoryAgentRunResult(string UserId, string Response);
+public record MemoryAgentRunResult(string UserId, string Response, string? SensitiveDataWarning = null);
 
 public record ConversationHistoryResult(Guid ConversationId, IReadOnlyList<ConversationMessage> Messages);
