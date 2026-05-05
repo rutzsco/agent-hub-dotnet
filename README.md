@@ -39,13 +39,14 @@ The API exposes three agent routes with two memory models.
 
 ## Architecture
 
-The solution is split into focused projects.
+The solution is a single ASP.NET Core project with organized subfolders.
 
-| Project | Purpose |
-|--------|---------|
-| `src/AgentHub.API` | ASP.NET Core minimal API, route handlers, agent registration, configuration loading |
-| `src/AgentHub.Persistence` | PostgreSQL conversation history storage |
-| `src/AgentHub.SessionState` | In-memory session tracking and history-based session rehydration |
+| Folder | Purpose |
+|--------|----------|
+| `src/AgentHub.API` | ASP.NET Core minimal API, route handlers, agent registration, configuration |
+| `src/AgentHub.API/agents/` | Agent implementations (DemoAgent, FoundryDemoAgent, FoundryMemoryAgent) |
+| `src/AgentHub.API/persistence/` | PostgreSQL conversation history storage and memory audit trail |
+| `src/AgentHub.API/session/` | In-memory session tracking and history-based session rehydration |
 
 ## Memory Model
 
@@ -358,17 +359,24 @@ src/
       DemoAgent.cs
       FoundryDemoAgent.cs
       FoundryMemoryAgent.cs
+      MemoryAuditService.cs
     routes/
       AgentRoutes.cs
-  AgentHub.Persistence/
-    ConversationMessage.cs
-    IConversationHistoryRepository.cs
-    PostgresConversationHistoryRepository.cs
-    PostgresConversationOptions.cs
-  AgentHub.SessionState/
-    ConversationSessionContext.cs
-    ConversationSessionManager.cs
-    IConversationSessionManager.cs
+    persistence/
+      ConversationMessage.cs
+      IConversationHistoryRepository.cs
+      PostgresConversationHistoryRepository.cs
+      PostgresConversationOptions.cs
+      PostgresMemoryAuditRepository.cs
+      sql/
+        20260505_add_audit_message_to_memory_deletion_audit.sql
+    session/
+      ConversationSessionContext.cs
+      ConversationSessionManager.cs
+      IConversationSessionManager.cs
+tests/
+  AgentHub.Tests/
+    (all test files)
 ```
 
 ## Notes
