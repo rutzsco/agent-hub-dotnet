@@ -10,8 +10,8 @@ public class SensitiveDataScrubberTests
 {
     [Theory]
     [InlineData("My credit card is 1234-5678-9012-3456", "[REDACTED_CREDIT_CARD]")]
-    [InlineData("Card: 4532015112830366", "[REDACTED_CREDIT_CARD]")]
-    [InlineData("Visa 5425-2334-3010-9903", "[REDACTED_CREDIT_CARD]")]
+    [InlineData("Card: 1111222233334445", "[REDACTED_CREDIT_CARD]")]
+    [InlineData("Card: 1111-2222-3333-4445", "[REDACTED_CREDIT_CARD]")]
     public void Scrub_RedactsCreditCards(string input, string expectedFragment)
     {
         var result = SensitiveDataScrubber.Scrub(input);
@@ -41,9 +41,9 @@ public class SensitiveDataScrubberTests
     }
 
     [Theory]
-    [InlineData("api_key=sk-1234567890abcdef", "[REDACTED_API_KEY]")]
-    [InlineData("Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9", "[REDACTED_API_KEY]")]
-    [InlineData("token: my-secret-token-xyz", "[REDACTED_API_KEY]")]
+    [InlineData("api_key=test-api-key-value", "[REDACTED_API_KEY]")]
+    [InlineData("Authorization: test-bearer-token-value", "[REDACTED_API_KEY]")]
+    [InlineData("token: test-token-value", "[REDACTED_API_KEY]")]
     public void Scrub_RedactsAPIKeys(string input, string expectedFragment)
     {
         var result = SensitiveDataScrubber.Scrub(input);
@@ -86,7 +86,7 @@ public class SensitiveDataScrubberTests
     [Fact]
     public void Scrub_HandlesMultipleSensitivePatterns()
     {
-        var input = "User: john.doe@example.com, SSN: 123-45-6789, Card: 4532015112830366, Phone: 555-123-4567";
+        var input = "User: john.doe@example.com, SSN: 123-45-6789, Card: 1111222233334445, Phone: 555-123-4567";
         var result = SensitiveDataScrubber.Scrub(input);
 
         Assert.Contains("[REDACTED_EMAIL]", result.ScrubbedText);
@@ -104,7 +104,7 @@ public class SensitiveDataScrubberTests
         // Original sensitive data should not be present
         Assert.DoesNotContain("john.doe@example.com", result.ScrubbedText);
         Assert.DoesNotContain("123-45-6789", result.ScrubbedText);
-        Assert.DoesNotContain("4532015112830366", result.ScrubbedText);
+        Assert.DoesNotContain("1111222233334445", result.ScrubbedText);
         Assert.DoesNotContain("555-123-4567", result.ScrubbedText);
     }
 
@@ -145,7 +145,7 @@ public class SensitiveDataScrubberTests
     public void ScrubMessagePair_ScrubsBothMessages()
     {
         var userMsg = "My email is alice@company.com and my phone is 555-123-4567";
-        var assistantMsg = "Got it. Your credit card is 4532015112830366.";
+        var assistantMsg = "Got it. Your credit card is 1111222233334445.";
 
         var result = SensitiveDataScrubber.ScrubMessagePair(userMsg, assistantMsg);
 
@@ -154,7 +154,7 @@ public class SensitiveDataScrubberTests
         Assert.DoesNotContain("@company.com", result.ScrubbedUserMessage);
 
         Assert.Contains("[REDACTED_CREDIT_CARD]", result.ScrubbedAssistantResponse);
-        Assert.DoesNotContain("4532015112830366", result.ScrubbedAssistantResponse);
+        Assert.DoesNotContain("1111222233334445", result.ScrubbedAssistantResponse);
 
         // Union of both messages' types
         Assert.Contains("Email", result.DetectedTypes);
@@ -169,8 +169,8 @@ public class SensitiveDataScrubberTests
         var sensitiveConversation = @"
 User: I need to reset my password. My current password is SuperSecret123!
 Assistant: Sure, I can help. To verify, what's the last 4 digits of your SSN?
-User: It's 123-45-6789, and my credit card is 4532015112830366. Call me at (555) 123-4567.
-Assistant: Got it. Here's your reset link, and don't share your API key: sk-1234567890abcdef
+User: It's 123-45-6789, and my credit card is 1111222233334445. Call me at (555) 123-4567.
+Assistant: Got it. Here's your reset link, and don't share your API key: test-api-key-value
 ";
 
         var result = SensitiveDataScrubber.Scrub(sensitiveConversation);
@@ -178,9 +178,9 @@ Assistant: Got it. Here's your reset link, and don't share your API key: sk-1234
         // All sensitive data should be redacted
         Assert.DoesNotContain("SuperSecret123", result.ScrubbedText);
         Assert.DoesNotContain("123-45-6789", result.ScrubbedText);
-        Assert.DoesNotContain("4532015112830366", result.ScrubbedText);
+        Assert.DoesNotContain("1111222233334445", result.ScrubbedText);
         Assert.DoesNotContain("555-123-4567", result.ScrubbedText);
-        Assert.DoesNotContain("sk-1234567890abcdef", result.ScrubbedText);
+        Assert.DoesNotContain("test-api-key-value", result.ScrubbedText);
 
         // Redaction markers should be present
         Assert.Contains("[REDACTED_PASSWORD]", result.ScrubbedText);
