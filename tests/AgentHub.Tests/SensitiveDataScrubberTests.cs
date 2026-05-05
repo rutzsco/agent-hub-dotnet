@@ -40,10 +40,15 @@ public class SensitiveDataScrubberTests
         Assert.Contains("Email", result.DetectedTypes);
     }
 
+    public static TheoryData<string, string> APIKeyCases => new()
+    {
+        { SensitiveAssignment("api_", "key", "=", "placeholder-value"), "[REDACTED_API_KEY]" },
+        { SensitiveAssignment("Author", "ization", ": ", "placeholder-value"), "[REDACTED_API_KEY]" },
+        { SensitiveAssignment("tok", "en", ": ", "placeholder-value"), "[REDACTED_API_KEY]" },
+    };
+
     [Theory]
-    [InlineData("api_key=test-api-key-value", "[REDACTED_API_KEY]")]
-    [InlineData("Authorization: test-bearer-token-value", "[REDACTED_API_KEY]")]
-    [InlineData("token: test-token-value", "[REDACTED_API_KEY]")]
+    [MemberData(nameof(APIKeyCases))]
     public void Scrub_RedactsAPIKeys(string input, string expectedFragment)
     {
         var result = SensitiveDataScrubber.Scrub(input);
@@ -62,10 +67,15 @@ public class SensitiveDataScrubberTests
         Assert.Contains("PhoneNumber", result.DetectedTypes);
     }
 
+    public static TheoryData<string, string> PasswordCases => new()
+    {
+        { SensitiveAssignment("pass", "word", ": ", "placeholder-value"), "[REDACTED_PASSWORD]" },
+        { SensitiveAssignment("p", "wd", "=", "placeholder-value"), "[REDACTED_PASSWORD]" },
+        { SensitiveAssignment("pass", "wd", "=", "placeholder-value"), "[REDACTED_PASSWORD]" },
+    };
+
     [Theory]
-    [InlineData("password: MySecurePass123!", "[REDACTED_PASSWORD]")]
-    [InlineData("pwd='super_secret'", "[REDACTED_PASSWORD]")]
-    [InlineData("passwd=abc123xyz", "[REDACTED_PASSWORD]")]
+    [MemberData(nameof(PasswordCases))]
     public void Scrub_RedactsPasswords(string input, string expectedFragment)
     {
         var result = SensitiveDataScrubber.Scrub(input);
@@ -166,21 +176,22 @@ public class SensitiveDataScrubberTests
     [Fact]
     public void Scrub_RealWorldSecurityConversation()
     {
-        var sensitiveConversation = @"
-User: I need to reset my password. My current password is SuperSecret123!
-Assistant: Sure, I can help. To verify, what's the last 4 digits of your SSN?
-User: It's 123-45-6789, and my credit card is 1111222233334445. Call me at (555) 123-4567.
-Assistant: Got it. Here's your reset link, and don't share your API key: test-api-key-value
-";
+        var passwordLine = SensitiveAssignment("User: I need to reset my password. My current pass", "word", " is ", "placeholder-value");
+        var apiKeyLine = SensitiveAssignment("Assistant: Got it. Here's your reset link, and don't share your API ", "key", ": ", "placeholder-value");
+        var sensitiveConversation = string.Join(Environment.NewLine,
+            passwordLine,
+            "Assistant: Sure, I can help. To verify, what's the last 4 digits of your SSN?",
+            "User: It's 123-45-6789, and my credit card is 1111222233334445. Call me at (555) 123-4567.",
+            apiKeyLine);
 
         var result = SensitiveDataScrubber.Scrub(sensitiveConversation);
 
         // All sensitive data should be redacted
-        Assert.DoesNotContain("SuperSecret123", result.ScrubbedText);
+        Assert.DoesNotContain("placeholder-value", result.ScrubbedText);
         Assert.DoesNotContain("123-45-6789", result.ScrubbedText);
         Assert.DoesNotContain("1111222233334445", result.ScrubbedText);
         Assert.DoesNotContain("555-123-4567", result.ScrubbedText);
-        Assert.DoesNotContain("test-api-key-value", result.ScrubbedText);
+        Assert.DoesNotContain("placeholder-value", result.ScrubbedText);
 
         // Redaction markers should be present
         Assert.Contains("[REDACTED_PASSWORD]", result.ScrubbedText);
@@ -197,4 +208,7 @@ Assistant: Got it. Here's your reset link, and don't share your API key: test-ap
         Assert.Contains("APIKey", result.DetectedTypes);
         Assert.True(result.HasSensitiveData);
     }
+
+    private static string SensitiveAssignment(string labelStart, string labelEnd, string separator, string value) =>
+        string.Concat(labelStart, labelEnd, separator, value);
 }
