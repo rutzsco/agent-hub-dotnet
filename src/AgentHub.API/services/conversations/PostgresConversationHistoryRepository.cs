@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Npgsql;
 
-namespace AgentHub.Persistence;
+namespace AgentHub.API.services.conversations;
 
 public sealed class PostgresConversationHistoryRepository : IConversationHistoryRepository
 {

@@ -1,5 +1,5 @@
+using AgentHub.API.services.conversations;
 using AgentHub.API.Services.Memory;
-using AgentHub.Persistence;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AgentHub.Tests;

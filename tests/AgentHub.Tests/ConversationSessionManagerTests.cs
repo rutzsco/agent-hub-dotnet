@@ -1,4 +1,4 @@
-using AgentHub.Persistence;
+using AgentHub.API.services.conversations;
 using AgentHub.SessionState;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;

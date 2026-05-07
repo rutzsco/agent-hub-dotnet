@@ -3,6 +3,8 @@ using System.Text.RegularExpressions;
 using Azure.AI.Projects;
 using Azure.AI.Projects.Agents;
 using Azure.Identity;
+using AgentHub.SessionState;
+using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Foundry;
 
 namespace AgentHub.API.Agents;
@@ -40,6 +42,42 @@ public static class FoundryDemoAgent
         return client.AsAIAgent(record);
     }
 #pragma warning restore OPENAI001
+
+    public static async Task<AgentMessageResult> ProcessMessage(
+        AIAgent agent,
+        IConversationSessionManager sessionManager,
+        string message,
+        Guid? conversationId,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            logger.LogWarning("Foundry agent request rejected due to empty message. ConversationId={ConversationId}", conversationId);
+            throw new ArgumentException("Message is required.", nameof(message));
+        }
+
+        var session = await sessionManager.GetOrCreateSessionAsync(
+            conversationId,
+            async _ => await agent.CreateSessionAsync(),
+            cancellationToken);
+
+        var response = await DemoAgent.RunWithConversationMemoryAsync(
+            agent,
+            session,
+            message,
+            logger,
+            cancellationToken);
+
+        var responseText = response.ToString();
+        await sessionManager.AppendTurnAsync(
+            session.ConversationId,
+            message,
+            responseText,
+            cancellationToken);
+
+        return new AgentMessageResult(session.ConversationId, responseText);
+    }
 
     private static async Task<ProjectsAgentRecord> GetOrCreateAgentAsync(
         AIProjectClient client, string agentName, string model, ILogger logger)

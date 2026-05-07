@@ -1,4 +1,4 @@
-namespace AgentHub.Persistence;
+namespace AgentHub.API.services.conversations;
 
 public sealed class PostgresConversationOptions
 {

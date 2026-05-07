@@ -1,6 +1,6 @@
 namespace AgentHub.SessionState;
 
-using AgentHub.Persistence;
+using AgentHub.API.services.conversations;
 
 public sealed record ConversationSessionContext(
 	Guid ConversationId,

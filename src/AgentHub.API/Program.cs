@@ -1,6 +1,6 @@
 using AgentHub.API;
 using AgentHub.API.Routes;
-using AgentHub.Persistence;
+using AgentHub.API.services.conversations;
 using AgentHub.SessionState;
 
 var builder = WebApplication.CreateBuilder(args);

@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-namespace AgentHub.Persistence;
+namespace AgentHub.API.services.conversations;
 
 public sealed class InMemoryConversationHistoryRepository : IConversationHistoryRepository
 {

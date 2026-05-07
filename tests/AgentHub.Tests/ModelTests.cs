@@ -1,4 +1,4 @@
-using AgentHub.Persistence;
+using AgentHub.API.services.conversations;
 
 namespace AgentHub.Tests;
 

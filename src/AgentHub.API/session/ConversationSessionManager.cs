@@ -1,5 +1,5 @@
 using System.Collections.Concurrent;
-using AgentHub.Persistence;
+using AgentHub.API.services.conversations;
 using Microsoft.Extensions.Logging;
 
 namespace AgentHub.SessionState;
