@@ -1,4 +1,4 @@
-namespace AgentHub.SessionState;
+namespace AgentHub.API.services.session;
 
 using AgentHub.API.services.conversations;
 

@@ -1,4 +1,5 @@
 using AgentHub.API.services.conversations;
+using AgentHub.API.services.session;
 
 namespace AgentHub.Tests;
 
@@ -54,7 +55,7 @@ public class ConversationSessionContextTests
         var session = new object();
         var history = new List<ConversationMessage>();
 
-        var context = new AgentHub.SessionState.ConversationSessionContext(
+        var context = new ConversationSessionContext(
             conversationId, session, history, RequiresHistoryReplay: true);
 
         Assert.Equal(conversationId, context.ConversationId);
@@ -66,7 +67,7 @@ public class ConversationSessionContextTests
     [Fact]
     public void Record_RequiresHistoryReplayFalse()
     {
-        var context = new AgentHub.SessionState.ConversationSessionContext(
+        var context = new ConversationSessionContext(
             Guid.NewGuid(), new object(), Array.Empty<ConversationMessage>(), RequiresHistoryReplay: false);
 
         Assert.False(context.RequiresHistoryReplay);

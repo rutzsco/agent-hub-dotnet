@@ -1,5 +1,5 @@
 using AgentHub.API.services.conversations;
-using AgentHub.SessionState;
+using AgentHub.API.services.session;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 

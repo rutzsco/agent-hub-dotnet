@@ -1,9 +1,9 @@
 using System.Text.RegularExpressions;
 using AgentHub.API.Agents;
 using AgentHub.API.services.conversations;
+using AgentHub.API.services.session;
 using AgentHub.API.Services;
 using AgentHub.API.Services.Memory;
-using AgentHub.SessionState;
 using Microsoft.Agents.AI;
 
 namespace AgentHub.API.Routes;

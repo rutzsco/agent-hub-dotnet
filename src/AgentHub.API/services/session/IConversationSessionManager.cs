@@ -1,6 +1,6 @@
 using AgentHub.API.services.conversations;
 
-namespace AgentHub.SessionState;
+namespace AgentHub.API.services.session;
 
 public interface IConversationSessionManager
 {

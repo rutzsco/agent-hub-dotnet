@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 using AgentHub.API.services.conversations;
 using Microsoft.Extensions.Logging;
 
-namespace AgentHub.SessionState;
+namespace AgentHub.API.services.session;
 
 public sealed class ConversationSessionManager : IConversationSessionManager
 {

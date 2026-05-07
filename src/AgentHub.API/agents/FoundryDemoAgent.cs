@@ -3,9 +3,9 @@ using System.Text.RegularExpressions;
 using Azure.AI.Projects;
 using Azure.AI.Projects.Agents;
 using Azure.Identity;
-using AgentHub.SessionState;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Foundry;
+using AgentHub.API.services.session;
 
 namespace AgentHub.API.Agents;
 

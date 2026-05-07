@@ -1,9 +1,9 @@
 using Azure.AI.Projects;
 using Azure.Identity;
 using AgentHub.API.services.conversations;
-using AgentHub.SessionState;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using AgentHub.API.services.session;
 
 namespace AgentHub.API.Agents;
 
