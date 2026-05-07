@@ -1,0 +1,3 @@
+paths:
+  exclude:
+    - tests/AgentHub.Tests/SensitiveDataScrubberTests.cs

@@ -1,0 +1,24 @@
+@AgentHub.API_HostAddress = http://localhost:5023
+
+GET {{AgentHub.API_HostAddress}}/health
+Accept: application/json
+
+###
+
+POST {{AgentHub.API_HostAddress}}/agents/demo
+Content-Type: application/json
+
+{
+  "message": "What is the largest city in France?"
+}
+
+###
+
+POST {{AgentHub.API_HostAddress}}/agents/foundry-demo
+Content-Type: application/json
+
+{
+  "message": "What is the largest city in France?"
+}
+
+###
