@@ -1,7 +1,8 @@
+using AgentHub.Persistence;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 
-namespace AgentHub.Persistence;
+namespace AgentHub.API.Services.Memory;
 
 /// <summary>
 /// PostgreSQL-backed memory deletion audit trail repository.

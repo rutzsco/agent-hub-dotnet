@@ -1,3 +1,4 @@
+using AgentHub.API.Services.Memory;
 using AgentHub.Persistence;
 using Microsoft.Extensions.Logging.Abstractions;
 
