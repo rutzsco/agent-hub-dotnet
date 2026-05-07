@@ -1,4 +1,4 @@
-using Azure.AI.Projects;
+using Azure.AI.OpenAI;
 using Azure.Identity;
 using AgentHub.API.services.conversations;
 using Microsoft.Agents.AI;
@@ -7,13 +7,14 @@ using AgentHub.API.services.session;
 
 namespace AgentHub.API.Agents;
 
-public static class DemoAgent
+public static class DemoAzureOpenAIAgent
 {
     public static AIAgent Create(Settings settings)
     {
-        return new AIProjectClient(settings.AzureAIProjectEndpoint, new DefaultAzureCredential())
+        return new AzureOpenAIClient(settings.AzureAIProjectEndpoint, new DefaultAzureCredential())
+            .GetChatClient(settings.AzureAIModelDeploymentName)
+            .AsIChatClient()
             .AsAIAgent(
-                model: settings.AzureAIModelDeploymentName,
                 instructions: "You are a friendly assistant. Keep your answers brief.",
                 name: "DemoAgent");
     }

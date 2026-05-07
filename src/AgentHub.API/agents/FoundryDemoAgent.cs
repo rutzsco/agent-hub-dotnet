@@ -62,7 +62,7 @@ public static class FoundryDemoAgent
             async _ => await agent.CreateSessionAsync(),
             cancellationToken);
 
-        var response = await DemoAgent.RunWithConversationMemoryAsync(
+        var response = await DemoAzureOpenAIAgent.RunWithConversationMemoryAsync(
             agent,
             session,
             message,

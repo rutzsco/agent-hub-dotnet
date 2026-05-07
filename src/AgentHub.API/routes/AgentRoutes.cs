@@ -20,7 +20,7 @@ public static partial class AgentRoutes
         {
             var logger = serviceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("AgentHub.AgentRegistration");
             logger.LogInformation("Registering demo agent instance using direct AI project model inference.");
-            return DemoAgent.Create(settings);
+            return DemoAzureOpenAIAgent.Create(settings);
         });
 
         services.AddKeyedSingleton<AIAgent>("foundry-demo", (serviceProvider, _) =>
@@ -72,7 +72,7 @@ public static partial class AgentRoutes
 
             try
             {
-                var result = await DemoAgent.ProcessMessage(
+                var result = await DemoAzureOpenAIAgent.ProcessMessage(
                     agent,
                     sessionManager,
                     request.Message,
