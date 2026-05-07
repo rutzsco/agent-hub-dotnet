@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using AgentHub.API.Agents;
 using AgentHub.API.Services;
+using AgentHub.API.Services.Memory;
 using AgentHub.Persistence;
 using AgentHub.SessionState;
 using Microsoft.Agents.AI;

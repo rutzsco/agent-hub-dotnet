@@ -1,4 +1,5 @@
 using AgentHub.API.Agents;
+using AgentHub.API.Services.Memory;
 using Azure.AI.Projects;
 using Azure.AI.Projects.Memory;
 using Microsoft.Extensions.Logging.Abstractions;

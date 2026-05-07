@@ -1,4 +1,5 @@
 using AgentHub.API.Agents;
+using AgentHub.API.Services.Memory;
 
 namespace AgentHub.Tests;
 

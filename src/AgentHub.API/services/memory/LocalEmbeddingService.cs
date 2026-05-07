@@ -2,7 +2,7 @@ using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using Microsoft.ML.Tokenizers;
 
-namespace AgentHub.API.Agents;
+namespace AgentHub.API.Services.Memory;
 
 /// <summary>
 /// Local embedding service using ONNX Runtime + BERT tokenizer.

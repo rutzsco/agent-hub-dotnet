@@ -1,7 +1,8 @@
 using System.Numerics.Tensors;
 using System.Text.RegularExpressions;
+using AgentHub.API.Agents;
 
-namespace AgentHub.API.Agents;
+namespace AgentHub.API.Services.Memory;
 
 /// <summary>
 /// Performs local topic relevance checks to detect topic shifts.

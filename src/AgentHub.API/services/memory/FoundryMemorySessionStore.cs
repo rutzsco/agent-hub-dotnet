@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using Microsoft.Agents.AI;
 
-namespace AgentHub.API.Agents;
+namespace AgentHub.API.Services.Memory;
 
 /// <summary>
 /// In-memory store for Foundry agent sessions used by the foundryMemoryAgent endpoint.

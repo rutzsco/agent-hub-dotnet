@@ -1,6 +1,7 @@
 using Azure.AI.Projects.Memory;
+using AgentHub.API.Agents;
 
-namespace AgentHub.API.Agents;
+namespace AgentHub.API.Services.Memory;
 
 /// <summary>
 /// Encapsulates memory audit operations: inspect what is stored for a user, and delete their memory footprint.

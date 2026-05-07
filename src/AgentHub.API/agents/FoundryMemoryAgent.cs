@@ -6,6 +6,7 @@ using Azure.AI.Projects;
 using Azure.AI.Projects.Agents;
 using Azure.AI.Projects.Memory;
 using Azure.Identity;
+using AgentHub.API.Services.Memory;
 using Microsoft.Agents.AI;
 
 namespace AgentHub.API.Agents;
