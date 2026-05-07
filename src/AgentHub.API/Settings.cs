@@ -11,7 +11,7 @@ public class Settings
     public string MemoryStoreName { get; init; } = "agent-hub-memory";
     public string MemoryEmbeddingModel { get; init; } = "text-embedding-3-small";
     public string? LocalEmbeddingModelPath { get; init; }
-    public required string PostgresConnectionString { get; init; }
+    public string? PostgresConnectionString { get; init; }
 
     public static Settings Load(IConfiguration configuration)
     {
@@ -54,7 +54,7 @@ public class Settings
         };
     }
 
-    private static string LoadPostgresConnectionString(IConfiguration configuration)
+    private static string? LoadPostgresConnectionString(IConfiguration configuration)
     {
         var postgresSection = configuration.GetSection("AgentHub:Postgres");
 
@@ -79,9 +79,7 @@ public class Settings
             || string.IsNullOrWhiteSpace(username)
             || string.IsNullOrWhiteSpace(password))
         {
-            throw new InvalidOperationException(
-                "PostgreSQL connection is not configured. Set AgentHub:Postgres:ConnectionString, POSTGRES_CONNECTION_STRING, or POSTGRES_URL, " +
-                "or provide AgentHub:Postgres:Host/Database/Username/Password (or the matching POSTGRES_* variables).");
+            return null;
         }
 
         var builder = new NpgsqlConnectionStringBuilder

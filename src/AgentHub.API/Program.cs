@@ -22,11 +22,18 @@ builder.Logging.AddSimpleConsole(options =>
 builder.Services.AddHealthChecks();
 builder.Services.AddOpenApi();
 builder.Services.AddAgents(settings);
-builder.Services.AddSingleton(new PostgresConversationOptions
+if (!string.IsNullOrWhiteSpace(settings.PostgresConnectionString))
 {
-    ConnectionString = settings.PostgresConnectionString
-});
-builder.Services.AddSingleton<IConversationHistoryRepository, PostgresConversationHistoryRepository>();
+    builder.Services.AddSingleton(new PostgresConversationOptions
+    {
+        ConnectionString = settings.PostgresConnectionString
+    });
+    builder.Services.AddSingleton<IConversationHistoryRepository, PostgresConversationHistoryRepository>();
+}
+else
+{
+    builder.Services.AddSingleton<IConversationHistoryRepository, InMemoryConversationHistoryRepository>();
+}
 builder.Services.AddSingleton<IConversationSessionManager, ConversationSessionManager>();
 
 var app = builder.Build();

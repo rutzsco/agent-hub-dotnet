@@ -79,14 +79,16 @@ public class SettingsTests
     }
 
     [Fact]
-    public void Load_ThrowsWhenPostgresNotConfigured()
+    public void Load_PostgresIsNull_WhenNotConfigured()
     {
         var config = BuildConfig(new Dictionary<string, string?>
         {
             ["AgentHub:AzureAIProjectEndpoint"] = "https://test.services.ai.azure.com/api/projects/proj1"
         });
 
-        Assert.Throws<InvalidOperationException>(() => Settings.Load(config));
+        var settings = Settings.Load(config);
+
+        Assert.Null(settings.PostgresConnectionString);
     }
 
     [Fact]
