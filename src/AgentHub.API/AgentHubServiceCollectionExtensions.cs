@@ -39,8 +39,7 @@ public static class AgentHubServiceCollectionExtensions
         services.AddSingleton(serviceProvider =>
         {
             var logger = serviceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("AgentHub.FoundryMemoryAgentRegistration");
-            logger.LogInformation("Registering Foundry memory agent with memory store and in-memory session cache.");
-            logger.LogDebug("Session cache: userId-keyed, thread-safe, survives app lifetime (lost on restart). Memory store: persists in Azure beyond restarts.");
+            logger.LogInformation("Registering Foundry memory agent with Foundry-managed memory.");
             return FoundryMemoryAgent.CreateAsync(settings, logger).GetAwaiter().GetResult();
         });
 

@@ -196,8 +196,8 @@ public static partial class AgentRoutes
                     cancellationToken);
 
                 logger.LogInformation(
-                    "Memory deletion completed and audited. UserId={UserId}, FoundryDeleted={FoundryDeleted}, LocalCacheCleared={LocalCacheCleared}",
-                    userId, result.FoundryScopeDeleted, result.LocalCacheCleared);
+                    "Memory deletion completed and audited. UserId={UserId}, FoundryDeleted={FoundryDeleted}",
+                    userId, result.FoundryScopeDeleted);
 
                 return Results.Ok(result);
             }

@@ -10,7 +10,6 @@ public class Settings
     public string? FoundryAgentName { get; init; }
     public string MemoryStoreName { get; init; } = "agent-hub-memory";
     public string MemoryEmbeddingModel { get; init; } = "text-embedding-3-small";
-    public string? LocalEmbeddingModelPath { get; init; }
     public string? PostgresConnectionString { get; init; }
 
     public static Settings Load(IConfiguration configuration)
@@ -37,9 +36,6 @@ public class Settings
             ?? configuration["AZURE_AI_MEMORY_EMBEDDING_MODEL"]
             ?? "text-embedding-3-small";
 
-        var localEmbeddingModelPath = agentHubSection["LocalEmbeddingModelPath"]
-            ?? configuration["LOCAL_EMBEDDING_MODEL_PATH"];
-
         var postgresConnectionString = LoadPostgresConnectionString(configuration);
 
         return new Settings
@@ -49,7 +45,6 @@ public class Settings
             FoundryAgentName = foundryAgentName,
             MemoryStoreName = memoryStoreName,
             MemoryEmbeddingModel = memoryEmbeddingModel,
-            LocalEmbeddingModelPath = localEmbeddingModelPath,
             PostgresConnectionString = postgresConnectionString
         };
     }
