@@ -16,7 +16,7 @@ public static class DemoAzureOpenAIAgent
             .AsIChatClient()
             .AsAIAgent(
                 instructions: "You are a friendly assistant. Keep your answers brief.",
-                name: "DemoAgent");
+                name: "demo-basic-aoai-agent");
     }
 
     public static async Task<AgentMessageResult> ProcessMessage(

@@ -1,7 +1,5 @@
 using AgentHub.API;
 using AgentHub.API.Routes;
-using AgentHub.API.services.conversations;
-using AgentHub.API.services.session;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,20 +19,7 @@ builder.Logging.AddSimpleConsole(options =>
 
 builder.Services.AddHealthChecks();
 builder.Services.AddOpenApi();
-builder.Services.AddAgents(settings);
-if (!string.IsNullOrWhiteSpace(settings.PostgresConnectionString))
-{
-    builder.Services.AddSingleton(new PostgresConversationOptions
-    {
-        ConnectionString = settings.PostgresConnectionString
-    });
-    builder.Services.AddSingleton<IConversationHistoryRepository, PostgresConversationHistoryRepository>();
-}
-else
-{
-    builder.Services.AddSingleton<IConversationHistoryRepository, InMemoryConversationHistoryRepository>();
-}
-builder.Services.AddSingleton<IConversationSessionManager, ConversationSessionManager>();
+builder.Services.AddAgentHubServices(settings);
 
 var app = builder.Build();
 

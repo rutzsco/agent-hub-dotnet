@@ -15,6 +15,11 @@ public interface IConversationSessionManager
         string assistantMessage,
         CancellationToken cancellationToken = default);
 
+    Task SaveServiceManagedConversationAsync(
+        Guid conversationId,
+        string serviceConversationId,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<ConversationMessage>> GetHistoryAsync(
         Guid conversationId,
         CancellationToken cancellationToken = default);

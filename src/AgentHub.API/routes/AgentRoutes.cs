@@ -5,6 +5,7 @@ using AgentHub.API.services.session;
 using AgentHub.API.Services;
 using AgentHub.API.Services.Memory;
 using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Foundry;
 
 namespace AgentHub.API.Routes;
 
@@ -13,51 +14,9 @@ public static partial class AgentRoutes
     [GeneratedRegex(@"^[a-zA-Z0-9][a-zA-Z0-9._%+@\-]{0,127}$", RegexOptions.Compiled)]
     internal static partial Regex UserIdPattern();
 
-    public static IServiceCollection AddAgents(this IServiceCollection services, Settings settings)
-    {
-        services.AddSingleton(settings);
-        services.AddKeyedSingleton<AIAgent>("demo", (serviceProvider, _) =>
-        {
-            var logger = serviceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("AgentHub.AgentRegistration");
-            logger.LogInformation("Registering demo agent instance using direct AI project model inference.");
-            return DemoAzureOpenAIAgent.Create(settings);
-        });
-
-        services.AddKeyedSingleton<AIAgent>("foundry-demo", (serviceProvider, _) =>
-        {
-            var logger = serviceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("AgentHub.FoundryAgentRegistration");
-            logger.LogInformation("Registering Foundry demo agent instance.");
-            return FoundryDemoAgent.CreateAsync(settings, logger).GetAwaiter().GetResult();
-        });
-
-        services.AddSingleton(serviceProvider =>
-        {
-            var logger = serviceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("AgentHub.FoundryMemoryAgentRegistration");
-            logger.LogInformation("Registering Foundry memory agent with memory store and in-memory session cache.");
-            logger.LogDebug("Session cache: userId-keyed, thread-safe, survives app lifetime (lost on restart). Memory store: persists in Azure beyond restarts.");
-            return FoundryMemoryAgent.CreateAsync(settings, logger).GetAwaiter().GetResult();
-        });
-
-        services.AddSingleton(serviceProvider =>
-        {
-            var memoryContext = serviceProvider.GetRequiredService<FoundryMemoryContext>();
-            var logger = serviceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("AgentHub.MemoryAuditService");
-            return new MemoryAuditService(memoryContext, logger);
-        });
-
-        services.AddSingleton<IMemoryAuditRepository>(serviceProvider =>
-        {
-            var postgresOptions = serviceProvider.GetRequiredService<PostgresConversationOptions>();
-            var logger = serviceProvider.GetRequiredService<ILoggerFactory>().CreateLogger<PostgresMemoryAuditRepository>();
-            return new PostgresMemoryAuditRepository(postgresOptions, logger);
-        });
-
-        return services;
-    }
-
     public static WebApplication MapAgentRoutes(this WebApplication app)
     {
-        app.MapPost("/agents/demo", async (
+        app.MapPost("/agents/demo-aoai-agent", async (
             [FromKeyedServices("demo")] AIAgent agent,
             IConversationSessionManager sessionManager,
             AgentRequest request,
@@ -93,8 +52,9 @@ public static partial class AgentRoutes
             }
         });
 
-        app.MapPost("/agents/foundry-demo", async (
-            [FromKeyedServices("foundry-demo")] AIAgent agent,
+#pragma warning disable OPENAI001 // FoundryAgent is experimental
+        app.MapPost("/agents/demo-foundry-basic-agent", async (
+            [FromKeyedServices("foundry-demo")] FoundryAgent agent,
             IConversationSessionManager sessionManager,
             AgentRequest request,
             ILoggerFactory loggerFactory,
@@ -128,6 +88,7 @@ public static partial class AgentRoutes
                 return Results.BadRequest(ex.Message);
             }
         });
+#pragma warning restore OPENAI001
 
         app.MapPost("/agents/foundryMemoryAgent", async (
             FoundryMemoryContext memoryContext,

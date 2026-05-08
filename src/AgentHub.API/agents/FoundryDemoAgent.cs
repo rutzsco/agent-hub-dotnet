@@ -11,7 +11,7 @@ namespace AgentHub.API.Agents;
 
 public static class FoundryDemoAgent
 {
-    public const string DefaultName = "DemoAgent";
+    public const string DefaultName = "demo-basic-agent";
     private static readonly Regex AgentNamePattern = new("^[A-Za-z0-9._-]{1,64}$", RegexOptions.Compiled);
 
 #pragma warning disable OPENAI001 // FoundryAgent is experimental
@@ -43,8 +43,9 @@ public static class FoundryDemoAgent
     }
 #pragma warning restore OPENAI001
 
+#pragma warning disable OPENAI001 // FoundryAgent is experimental
     public static async Task<AgentMessageResult> ProcessMessage(
-        AIAgent agent,
+        FoundryAgent agent,
         IConversationSessionManager sessionManager,
         string message,
         Guid? conversationId,
@@ -59,25 +60,24 @@ public static class FoundryDemoAgent
 
         var session = await sessionManager.GetOrCreateSessionAsync(
             conversationId,
-            async _ => await agent.CreateSessionAsync(),
+            async token => await agent.CreateConversationSessionAsync(token),
             cancellationToken);
 
-        var response = await DemoAzureOpenAIAgent.RunWithConversationMemoryAsync(
-            agent,
-            session,
+        var agentSession = (AgentSession)session.Session;
+        var response = await agent.RunAsync(
             message,
-            logger,
-            cancellationToken);
+            agentSession,
+            cancellationToken: cancellationToken);
 
         var responseText = response.ToString();
-        await sessionManager.AppendTurnAsync(
+        await sessionManager.SaveServiceManagedConversationAsync(
             session.ConversationId,
-            message,
-            responseText,
+            ((ChatClientAgentSession)agentSession).ConversationId,
             cancellationToken);
 
         return new AgentMessageResult(session.ConversationId, responseText);
     }
+#pragma warning restore OPENAI001
 
     private static async Task<ProjectsAgentRecord> GetOrCreateAgentAsync(
         AIProjectClient client, string agentName, string model, ILogger logger)
