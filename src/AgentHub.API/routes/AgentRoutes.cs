@@ -104,8 +104,8 @@ public static partial class AgentRoutes
                 "Received Foundry memory agent request. UserId={UserId}, MessageLength={MessageLength}",
                 request.UserId,
                 request.Message?.Length ?? 0);
-            logger.LogDebug("Request details: Message={Message}\n[Isolation: No PostgreSQL, uses Foundry memory store + session cache]", 
-                request.Message);
+            logger.LogDebug("Message={Message}, ConversationId={ConversationId} (null = new conversation)",
+                request.Message, request.ConversationId);
 
             try
             {
@@ -113,6 +113,7 @@ public static partial class AgentRoutes
                     memoryContext,
                     request.Message,
                     request.UserId,
+                    request.ConversationId,
                     logger,
                     cancellationToken);
 
@@ -121,7 +122,7 @@ public static partial class AgentRoutes
                     result.UserId,
                     result.Response.Length);
 
-                return Results.Ok(new MemoryAgentRunResult(result.UserId, result.Response, result.SensitiveDataWarning));
+                return Results.Ok(new MemoryAgentRunResult(result.UserId, result.Response, result.ConversationId));
             }
             catch (ArgumentException ex)
             {
@@ -196,8 +197,8 @@ public static partial class AgentRoutes
                     cancellationToken);
 
                 logger.LogInformation(
-                    "Memory deletion completed and audited. UserId={UserId}, FoundryDeleted={FoundryDeleted}, LocalCacheCleared={LocalCacheCleared}",
-                    userId, result.FoundryScopeDeleted, result.LocalCacheCleared);
+                    "Memory deletion completed and audited. UserId={UserId}, FoundryDeleted={FoundryDeleted}",
+                    userId, result.FoundryScopeDeleted);
 
                 return Results.Ok(result);
             }
@@ -246,8 +247,8 @@ public record AgentRequest(string Message, Guid? ConversationId);
 
 public record AgentRunResult(Guid ConversationId, string Response);
 
-public record MemoryAgentRequest(string Message, string UserId);
+public record MemoryAgentRequest(string Message, string UserId, string? ConversationId = null);
 
-public record MemoryAgentRunResult(string UserId, string Response, string? SensitiveDataWarning = null);
+public record MemoryAgentRunResult(string UserId, string Response, string ConversationId);
 
 public record ConversationHistoryResult(Guid ConversationId, IReadOnlyList<ConversationMessage> Messages);

@@ -12,17 +12,13 @@ public sealed class MemoryAuditService
 {
     private readonly Func<string, string, CancellationToken, Task<MemoryStoreSearchResponse>> _searchMemories;
     private readonly Func<string, CancellationToken, Task<MemoryStoreDeleteScopeResponse>> _deleteScope;
-    private readonly FoundryMemorySessionCache _sessionCache;
-    private readonly FoundryMemoryOperationCache _operationCache;
     private readonly ILogger _logger;
 
     public MemoryAuditService(FoundryMemoryContext context, ILogger logger)
         : this(
             (scope, query, ct) => FoundryMemoryAgent.SearchMemoriesAsync(
-                context.MemoryClient, context.MemoryStoreName, scope, query, null, ct),
+                context.MemoryClient, context.MemoryStoreName, scope, query, ct),
             async (scope, ct) => (await context.MemoryClient.DeleteScopeAsync(context.MemoryStoreName, scope, ct)).Value,
-            context.SessionCache,
-            context.OperationCache,
             logger)
     {
     }
@@ -30,14 +26,10 @@ public sealed class MemoryAuditService
     internal MemoryAuditService(
         Func<string, string, CancellationToken, Task<MemoryStoreSearchResponse>> searchMemories,
         Func<string, CancellationToken, Task<MemoryStoreDeleteScopeResponse>> deleteScope,
-        FoundryMemorySessionCache sessionCache,
-        FoundryMemoryOperationCache operationCache,
         ILogger logger)
     {
         _searchMemories = searchMemories;
         _deleteScope = deleteScope;
-        _sessionCache = sessionCache;
-        _operationCache = operationCache;
         _logger = logger;
     }
 
@@ -74,8 +66,7 @@ public sealed class MemoryAuditService
     }
 
     /// <summary>
-    /// Deletes the memory footprint for the given userId:
-    /// calls the Foundry SDK's DeleteScope API to remove persisted memories, then clears in-process caches.
+    /// Deletes the memory footprint for the given userId via Foundry's DeleteScope API.
     /// </summary>
     public async Task<MemoryDeleteResult> DeleteAsync(string userId, CancellationToken cancellationToken)
     {
@@ -84,18 +75,14 @@ public sealed class MemoryAuditService
         var deleteResponse = await _deleteScope(userId, cancellationToken);
         var foundryDeleted = deleteResponse.IsDeleted;
 
-        var sessionCleared = _sessionCache.ClearUser(userId);
-        var operationCacheCleared = _operationCache.ClearUser(userId);
-        var localCacheCleared = sessionCleared || operationCacheCleared;
-
         _logger.LogInformation(
-            "Memory delete completed. UserId={UserId}, FoundryScopeDeleted={Foundry}, LocalCacheCleared={Local}",
-            userId, foundryDeleted, localCacheCleared);
+            "Memory delete completed. UserId={UserId}, FoundryScopeDeleted={Foundry}",
+            userId, foundryDeleted);
 
-        return new MemoryDeleteResult(userId, foundryDeleted, localCacheCleared);
+        return new MemoryDeleteResult(userId, foundryDeleted);
     }
 }
 
 public record MemoryInspectResult(string UserId, string[] Memories);
 
-public record MemoryDeleteResult(string UserId, bool FoundryScopeDeleted, bool LocalCacheCleared);
+public record MemoryDeleteResult(string UserId, bool FoundryScopeDeleted);
