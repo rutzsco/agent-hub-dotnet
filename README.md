@@ -92,6 +92,57 @@ For `POST /agents/foundryMemoryAgent`, conversation continuity is session-based:
 
 The `conversationId` is not passed as text in the prompt. It is carried by `AgentSession`, which is passed to `RunAsync`.
 
+### First turn — start a new conversation
+
+Request:
+
+```http
+POST /agents/foundryMemoryAgent
+Content-Type: application/json
+
+{
+  "message": "My name is Alex and I prefer dark mode in all apps.",
+  "userId": "alex@example.com"
+}
+```
+
+Response:
+
+```json
+{
+  "userId": "alex@example.com",
+  "response": "Got it, Alex! I'll remember that you prefer dark mode.",
+  "conversationId": "thread_abc123"
+}
+```
+
+### Follow-up turn — continue the same conversation
+
+Request:
+
+```http
+POST /agents/foundryMemoryAgent
+Content-Type: application/json
+
+{
+  "message": "What UI preference did I mention?",
+  "userId": "alex@example.com",
+  "conversationId": "thread_abc123"
+}
+```
+
+Response:
+
+```json
+{
+  "userId": "alex@example.com",
+  "response": "You mentioned that you prefer dark mode in all apps.",
+  "conversationId": "thread_abc123"
+}
+```
+
+> `conversationId` is the Foundry server-side thread ID returned by the first call. Pass it back on every subsequent turn to continue the same conversation. Omit it (or send `null`) to start a fresh thread.
+
 ## Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
