@@ -1,3 +1,4 @@
+using Azure;
 using Azure.AI.OpenAI;
 using Azure.Identity;
 using AgentHub.API.services.conversations;
@@ -11,7 +12,12 @@ public static class DemoAzureOpenAIAgent
 {
     public static AIAgent Create(Settings settings)
     {
-        return new AzureOpenAIClient(settings.AzureAIProjectEndpoint, new DefaultAzureCredential())
+        var endpoint = settings.AzureOpenAIEndpoint ?? settings.AzureAIProjectEndpoint;
+        var client = string.IsNullOrWhiteSpace(settings.AzureAIApiKey)
+            ? new AzureOpenAIClient(endpoint, new DefaultAzureCredential())
+            : new AzureOpenAIClient(endpoint, new AzureKeyCredential(settings.AzureAIApiKey));
+
+        return client
             .GetChatClient(settings.AzureAIModelDeploymentName)
             .AsIChatClient()
             .AsAIAgent(
