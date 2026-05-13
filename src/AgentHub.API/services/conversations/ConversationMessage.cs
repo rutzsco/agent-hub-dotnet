@@ -1,7 +1,7 @@
 namespace AgentHub.API.services.conversations;
 
 public sealed record ConversationMessage(
-    long Id,
+    string Id,
     Guid ConversationId,
     string Role,
     string Content,

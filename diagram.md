@@ -136,8 +136,13 @@ sequenceDiagram
     Route->>Agent: RunAsync(message, session)
     Provider->>MemoryAPI: Retrieve scoped memory before run
     Agent->>Foundry: Execute agent turn in conversation
-    Foundry-->>Agent: Response
-    Provider->>MemoryAPI: Persist new turn after run
 
-    Route-->>Client: 200 OK {userId, response, conversationId}
+    alt Foundry run succeeds
+        Foundry-->>Agent: Response
+        Provider->>MemoryAPI: Persist new turn after run
+        Route-->>Client: 200 OK {userId, response, conversationId}
+    else Foundry blocks request (content_filter)
+        Foundry-->>Agent: HTTP 400 invalid_request_error: content_filter
+        Route-->>Client: 400 Bad Request {error, code=content_filter}
+    end
 ```
