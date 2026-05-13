@@ -215,6 +215,38 @@
       overflow-x: auto;
     }
 
+    .response.is-loading {
+      color: #e2f5ea;
+      background: #14372f;
+      position: relative;
+      padding-right: 38px;
+    }
+
+    .response.is-loading::after {
+      content: "";
+      position: absolute;
+      right: 12px;
+      top: 12px;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(226, 245, 234, 0.35);
+      border-top-color: #e2f5ea;
+      border-radius: 999px;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    button:disabled {
+      opacity: 0.72;
+      cursor: wait;
+      transform: none;
+    }
+
     .status-ok { color: #8ff4bf; }
     .status-bad { color: #ffb4aa; }
 
@@ -330,6 +362,18 @@
   </main>
 
   <script>
+    const setPending = (id, pending) => {
+      const el = document.getElementById(id);
+      if (!el) {
+        return;
+      }
+
+      el.classList.toggle("is-loading", pending);
+      if (pending) {
+        el.textContent = "Working on request...";
+      }
+    };
+
     const out = (id, status, payload) => {
       const el = document.getElementById(id);
       const statusClass = status >= 200 && status < 300 ? "status-ok" : "status-bad";
@@ -337,7 +381,25 @@
       el.innerHTML = `<span class="${statusClass}">HTTP ${status}</span>\n${body}`;
     };
 
+    const runWithBusyButton = async (button, action) => {
+      if (!button) {
+        await action();
+        return;
+      }
+
+      const originalText = button.textContent;
+      button.disabled = true;
+      button.textContent = "Working...";
+      try {
+        await action();
+      } finally {
+        button.disabled = false;
+        button.textContent = originalText;
+      }
+    };
+
     const request = async (method, path, body, outId) => {
+      setPending(outId, true);
       try {
         const res = await fetch(path, {
           method,
@@ -354,6 +416,8 @@
         out(outId, res.status, payload || "(empty response)");
       } catch (err) {
         out(outId, 0, { error: err.message || String(err) });
+      } finally {
+        setPending(outId, false);
       }
     };
 
@@ -363,51 +427,65 @@
       });
     });
 
-    document.querySelector('[data-action="demo"]').addEventListener("click", () => {
-      const message = document.getElementById("demoMessage").value;
-      const conversationId = document.getElementById("demoConversationId").value.trim();
-      const body = conversationId ? { message, conversationId } : { message };
-      request("POST", "/agents/demo-aoai-agent", body, "demoOut");
+    document.querySelector('[data-action="demo"]').addEventListener("click", async (event) => {
+      await runWithBusyButton(event.currentTarget, async () => {
+        const message = document.getElementById("demoMessage").value;
+        const conversationId = document.getElementById("demoConversationId").value.trim();
+        const body = conversationId ? { message, conversationId } : { message };
+        await request("POST", "/agents/demo-aoai-agent", body, "demoOut");
+      });
     });
 
-    document.querySelector('[data-action="foundryDemo"]').addEventListener("click", () => {
-      const message = document.getElementById("foundryDemoMessage").value;
-      const conversationId = document.getElementById("foundryDemoConversationId").value.trim();
-      const body = conversationId ? { message, conversationId } : { message };
-      request("POST", "/agents/demo-foundry-basic-agent", body, "foundryDemoOut");
+    document.querySelector('[data-action="foundryDemo"]').addEventListener("click", async (event) => {
+      await runWithBusyButton(event.currentTarget, async () => {
+        const message = document.getElementById("foundryDemoMessage").value;
+        const conversationId = document.getElementById("foundryDemoConversationId").value.trim();
+        const body = conversationId ? { message, conversationId } : { message };
+        await request("POST", "/agents/demo-foundry-basic-agent", body, "foundryDemoOut");
+      });
     });
 
-    document.querySelector('[data-action="memoryAgent"]').addEventListener("click", () => {
-      const message = document.getElementById("memoryMessage").value;
-      const userId = document.getElementById("memoryUserId").value.trim();
-      const conversationId = document.getElementById("memoryConversationId").value.trim();
-      const body = conversationId ? { message, userId, conversationId } : { message, userId };
-      request("POST", "/agents/foundryMemoryAgent", body, "memoryOut");
+    document.querySelector('[data-action="memoryAgent"]').addEventListener("click", async (event) => {
+      await runWithBusyButton(event.currentTarget, async () => {
+        const message = document.getElementById("memoryMessage").value;
+        const userId = document.getElementById("memoryUserId").value.trim();
+        const conversationId = document.getElementById("memoryConversationId").value.trim();
+        const body = conversationId ? { message, userId, conversationId } : { message, userId };
+        await request("POST", "/agents/foundryMemoryAgent", body, "memoryOut");
+      });
     });
 
-    document.querySelector('[data-action="inspectMemory"]').addEventListener("click", () => {
-      const userId = encodeURIComponent(document.getElementById("inspectUserId").value.trim());
-      const topic = document.getElementById("inspectTopic").value.trim();
-      const qs = topic ? `?topic=${encodeURIComponent(topic)}` : "";
-      request("GET", `/users/${userId}/memory${qs}`, null, "inspectOut");
+    document.querySelector('[data-action="inspectMemory"]').addEventListener("click", async (event) => {
+      await runWithBusyButton(event.currentTarget, async () => {
+        const userId = encodeURIComponent(document.getElementById("inspectUserId").value.trim());
+        const topic = document.getElementById("inspectTopic").value.trim();
+        const qs = topic ? `?topic=${encodeURIComponent(topic)}` : "";
+        await request("GET", `/users/${userId}/memory${qs}`, null, "inspectOut");
+      });
     });
 
-    document.querySelector('[data-action="deleteMemory"]').addEventListener("click", () => {
-      const userId = encodeURIComponent(document.getElementById("deleteUserId").value.trim());
-      request("DELETE", `/users/${userId}/memory`, null, "deleteOut");
+    document.querySelector('[data-action="deleteMemory"]').addEventListener("click", async (event) => {
+      await runWithBusyButton(event.currentTarget, async () => {
+        const userId = encodeURIComponent(document.getElementById("deleteUserId").value.trim());
+        await request("DELETE", `/users/${userId}/memory`, null, "deleteOut");
+      });
     });
 
-    document.querySelector('[data-action="history"]').addEventListener("click", () => {
-      const conversationId = encodeURIComponent(document.getElementById("historyConversationId").value.trim());
-      if (!conversationId) {
-        out("utilityOut", 400, { error: "Conversation ID is required." });
-        return;
-      }
-      request("GET", `/conversations/${conversationId}/history`, null, "utilityOut");
+    document.querySelector('[data-action="history"]').addEventListener("click", async (event) => {
+      await runWithBusyButton(event.currentTarget, async () => {
+        const conversationId = encodeURIComponent(document.getElementById("historyConversationId").value.trim());
+        if (!conversationId) {
+          out("utilityOut", 400, { error: "Conversation ID is required." });
+          return;
+        }
+        await request("GET", `/conversations/${conversationId}/history`, null, "utilityOut");
+      });
     });
 
-    document.querySelector('[data-action="health"]').addEventListener("click", () => {
-      request("GET", "/health", null, "utilityOut");
+    document.querySelector('[data-action="health"]').addEventListener("click", async (event) => {
+      await runWithBusyButton(event.currentTarget, async () => {
+        await request("GET", "/health", null, "utilityOut");
+      });
     });
   </script>
 </body>
