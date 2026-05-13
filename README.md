@@ -82,6 +82,25 @@ This means the conversation can survive process restarts as long as PostgreSQL h
 
 This path does not use the PostgreSQL conversation pipeline.
 
+### Content Filter Handling (`foundryMemoryAgent`)
+
+If Azure OpenAI content management blocks a run (for example, `invalid_request_error: content_filter`), the API now returns a handled `400 Bad Request` instead of an unhandled server error.
+
+Response shape:
+
+```json
+{
+  "error": "The request was blocked by content filtering. Please rephrase your message and retry.",
+  "code": "content_filter"
+}
+```
+
+Notes:
+
+- The content filter decision is based on the effective prompt, which can include current message text, resumed conversation thread context, and memory retrieved by `FoundryMemoryProvider`.
+- A request can fail on a resumed conversation even if the latest user message appears safe in isolation.
+- To isolate context-related blocks, test with a new `conversationId` and, if needed, a different `userId`.
+
 ## Foundry Memory Conversation Flow
 
 For `POST /agents/foundryMemoryAgent`, conversation continuity is session-based:

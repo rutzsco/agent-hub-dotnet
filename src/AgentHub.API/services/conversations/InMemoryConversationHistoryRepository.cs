@@ -5,7 +5,6 @@ namespace AgentHub.API.services.conversations;
 public sealed class InMemoryConversationHistoryRepository : IConversationHistoryRepository
 {
     private readonly ConcurrentDictionary<Guid, List<ConversationMessage>> _messages = new();
-    private long _nextId;
 
     public Task<IReadOnlyList<ConversationMessage>> GetMessagesAsync(
         Guid conversationId,
@@ -34,7 +33,7 @@ public sealed class InMemoryConversationHistoryRepository : IConversationHistory
         lock (messages)
         {
             messages.Add(new ConversationMessage(
-                Interlocked.Increment(ref _nextId),
+                Guid.NewGuid().ToString(),
                 conversationId,
                 role,
                 content,
