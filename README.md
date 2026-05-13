@@ -37,6 +37,15 @@ The API exposes three agent routes with two memory models.
 | `GET` | `/health` | Health check |
 | `GET` | `/swagger` | Swagger UI |
 
+## Common API UI
+
+The project now includes a shared browser UI for testing all API routes from one page.
+
+- URL: `/` (served from `src/AgentHub.API/wwwroot/index.html`)
+- Includes forms for all agent, memory inspect/delete, conversation history, and health endpoints
+- Displays HTTP status and JSON responses inline
+- Swagger remains available at `/swagger`
+
 ## Architecture
 
 The solution is a single ASP.NET Core project with organized subfolders.
@@ -283,6 +292,10 @@ The default local URLs are defined in `src/AgentHub.API/Properties/launchSetting
 Swagger UI is available at:
 
 - `http://localhost:5023/swagger`
+
+The API Console UI is available at:
+
+- `http://localhost:5023/`
 
 ## Hot Reload
 

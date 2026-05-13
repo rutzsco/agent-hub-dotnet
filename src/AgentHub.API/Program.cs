@@ -54,11 +54,12 @@ app.Use(async (context, next) =>
 
 app.MapHealthChecks("/health");
 app.MapOpenApi();
+app.UseDefaultFiles();
+app.UseStaticFiles();
 app.UseSwaggerUI(options =>
 {
     options.SwaggerEndpoint("/openapi/v1.json", "AgentHub API");
 });
-app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
 app.MapAgentRoutes();
 
 app.Run();

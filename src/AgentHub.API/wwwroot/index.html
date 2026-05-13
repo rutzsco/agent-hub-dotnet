@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agent Hub API Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f4efe6;
+      --surface: #fffaf1;
+      --surface-alt: #efe5d6;
+      --ink: #122620;
+      --ink-soft: #3a4f47;
+      --brand: #0f6d5e;
+      --brand-alt: #f2b544;
+      --danger: #b23a2f;
+      --ok: #1a7f5a;
+      --radius: 14px;
+      --shadow: 0 12px 34px rgba(18, 38, 32, 0.14);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Space Grotesk", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 85% 0%, rgba(242, 181, 68, 0.35), transparent 40%),
+        radial-gradient(circle at 0% 100%, rgba(15, 109, 94, 0.20), transparent 45%),
+        var(--bg);
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .hero {
+      background: linear-gradient(130deg, #0f6d5e 0%, #195f55 58%, #1f4f4a 100%);
+      color: #f9f7f2;
+      border-radius: var(--radius);
+      padding: 26px;
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      width: 220px;
+      height: 220px;
+      border-radius: 999px;
+      background: rgba(242, 181, 68, 0.22);
+      right: -70px;
+      top: -80px;
+      pointer-events: none;
+    }
+
+    .hero h1 {
+      margin: 0;
+      font-size: 1.8rem;
+      letter-spacing: 0.02em;
+    }
+
+    .hero p {
+      margin: 10px 0 0;
+      color: #e5f4ef;
+      max-width: 780px;
+    }
+
+    .hero-links {
+      margin-top: 14px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .hero-links a {
+      color: #0d3e36;
+      background: #f2b544;
+      text-decoration: none;
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 0.9rem;
+    }
+
+    .grid {
+      margin-top: 20px;
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid #ddcfb8;
+      border-radius: var(--radius);
+      padding: 14px;
+      box-shadow: 0 7px 18px rgba(18, 38, 32, 0.07);
+      opacity: 0;
+      transform: translateY(10px);
+      animation: reveal 0.32s ease forwards;
+    }
+
+    .card:nth-child(2) { animation-delay: 0.04s; }
+    .card:nth-child(3) { animation-delay: 0.08s; }
+    .card:nth-child(4) { animation-delay: 0.12s; }
+    .card:nth-child(5) { animation-delay: 0.16s; }
+    .card:nth-child(6) { animation-delay: 0.2s; }
+
+    @keyframes reveal {
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .title {
+      margin: 0 0 6px;
+      font-size: 1rem;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .pill {
+      font-size: 0.72rem;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-family: "IBM Plex Mono", monospace;
+      background: var(--surface-alt);
+      color: #4d4030;
+    }
+
+    .desc {
+      margin: 0 0 10px;
+      color: var(--ink-soft);
+      font-size: 0.92rem;
+    }
+
+    label {
+      font-size: 0.8rem;
+      font-weight: 700;
+      display: block;
+      margin-top: 7px;
+      color: #2d4139;
+    }
+
+    input, textarea {
+      width: 100%;
+      margin-top: 4px;
+      border: 1px solid #c9bca5;
+      border-radius: 10px;
+      padding: 8px 10px;
+      font: inherit;
+      background: #fffdf8;
+      color: var(--ink);
+    }
+
+    textarea {
+      min-height: 72px;
+      resize: vertical;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.86rem;
+      line-height: 1.4;
+    }
+
+    .row {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      border: none;
+      border-radius: 10px;
+      padding: 9px 12px;
+      font-family: "Space Grotesk", sans-serif;
+      font-weight: 700;
+      background: var(--brand);
+      color: #f8fff8;
+      cursor: pointer;
+      transition: transform 0.1s ease, background 0.1s ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      background: #11574d;
+    }
+
+    button.secondary {
+      background: #4d6057;
+    }
+
+    .response {
+      margin-top: 10px;
+      border-radius: 10px;
+      background: #0c241f;
+      color: #cef7df;
+      padding: 10px;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.8rem;
+      min-height: 94px;
+      white-space: pre-wrap;
+      overflow-x: auto;
+    }
+
+    .status-ok { color: #8ff4bf; }
+    .status-bad { color: #ffb4aa; }
+
+    .subtle {
+      color: #5a6c64;
+      font-size: 0.8rem;
+      margin-top: 6px;
+    }
+
+    @media (max-width: 700px) {
+      .container { padding: 14px; }
+      .hero { padding: 18px; }
+      .hero h1 { font-size: 1.4rem; }
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <section class="hero">
+      <h1>Agent Hub API Console</h1>
+      <p>Single testing UI for all exposed endpoints. Use this page to send agent prompts, inspect memory, delete memory, fetch conversation history, and run health checks without switching tools.</p>
+      <div class="hero-links">
+        <a href="/swagger" target="_blank" rel="noopener">Open Swagger</a>
+        <a href="/openapi/v1.json" target="_blank" rel="noopener">Open OpenAPI JSON</a>
+      </div>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2 class="title">Demo AOAI Agent <span class="pill">POST /agents/demo-aoai-agent</span></h2>
+        <p class="desc">Code-first agent route.</p>
+        <label for="demoMessage">Message</label>
+        <textarea id="demoMessage">Hello from API console.</textarea>
+        <label for="demoConversationId">Conversation ID (optional)</label>
+        <input id="demoConversationId" placeholder="GUID">
+        <div class="row">
+          <button data-action="demo">Send</button>
+          <button class="secondary" data-clear="demoOut">Clear</button>
+        </div>
+        <pre id="demoOut" class="response">Ready.</pre>
+      </article>
+
+      <article class="card">
+        <h2 class="title">Foundry Demo Agent <span class="pill">POST /agents/demo-foundry-basic-agent</span></h2>
+        <p class="desc">Foundry-managed agent route.</p>
+        <label for="foundryDemoMessage">Message</label>
+        <textarea id="foundryDemoMessage">Say hello and summarize your capabilities.</textarea>
+        <label for="foundryDemoConversationId">Conversation ID (optional)</label>
+        <input id="foundryDemoConversationId" placeholder="GUID">
+        <div class="row">
+          <button data-action="foundryDemo">Send</button>
+          <button class="secondary" data-clear="foundryDemoOut">Clear</button>
+        </div>
+        <pre id="foundryDemoOut" class="response">Ready.</pre>
+      </article>
+
+      <article class="card">
+        <h2 class="title">Foundry Memory Agent <span class="pill">POST /agents/foundryMemoryAgent</span></h2>
+        <p class="desc">User-scoped Foundry memory with optional conversation resume.</p>
+        <label for="memoryMessage">Message</label>
+        <textarea id="memoryMessage">My preferred report format is concise bullets.</textarea>
+        <label for="memoryUserId">User ID</label>
+        <input id="memoryUserId" value="skrish">
+        <label for="memoryConversationId">Conversation ID (optional)</label>
+        <input id="memoryConversationId" placeholder="conv_...">
+        <div class="row">
+          <button data-action="memoryAgent">Send</button>
+          <button class="secondary" data-clear="memoryOut">Clear</button>
+        </div>
+        <div class="subtle">Handles content filter responses as 400 with <code>code=content_filter</code>.</div>
+        <pre id="memoryOut" class="response">Ready.</pre>
+      </article>
+
+      <article class="card">
+        <h2 class="title">Inspect Memory <span class="pill">GET /users/{userId}/memory</span></h2>
+        <p class="desc">Inspect memories for a specific user scope.</p>
+        <label for="inspectUserId">User ID</label>
+        <input id="inspectUserId" value="skrish">
+        <label for="inspectTopic">Topic (optional)</label>
+        <input id="inspectTopic" placeholder="preferences">
+        <div class="row">
+          <button data-action="inspectMemory">Fetch</button>
+          <button class="secondary" data-clear="inspectOut">Clear</button>
+        </div>
+        <pre id="inspectOut" class="response">Ready.</pre>
+      </article>
+
+      <article class="card">
+        <h2 class="title">Delete Memory <span class="pill">DELETE /users/{userId}/memory</span></h2>
+        <p class="desc">Deletes user memory scope and writes an audit entry.</p>
+        <label for="deleteUserId">User ID</label>
+        <input id="deleteUserId" value="skrish">
+        <div class="row">
+          <button data-action="deleteMemory">Delete</button>
+          <button class="secondary" data-clear="deleteOut">Clear</button>
+        </div>
+        <pre id="deleteOut" class="response">Ready.</pre>
+      </article>
+
+      <article class="card">
+        <h2 class="title">Conversation History + Health <span class="pill">GET endpoints</span></h2>
+        <p class="desc">Fetch persisted conversation history and check API health.</p>
+        <label for="historyConversationId">Conversation ID</label>
+        <input id="historyConversationId" placeholder="GUID">
+        <div class="row">
+          <button data-action="history">History</button>
+          <button data-action="health">Health</button>
+          <button class="secondary" data-clear="utilityOut">Clear</button>
+        </div>
+        <pre id="utilityOut" class="response">Ready.</pre>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    const out = (id, status, payload) => {
+      const el = document.getElementById(id);
+      const statusClass = status >= 200 && status < 300 ? "status-ok" : "status-bad";
+      const body = typeof payload === "string" ? payload : JSON.stringify(payload, null, 2);
+      el.innerHTML = `<span class="${statusClass}">HTTP ${status}</span>\n${body}`;
+    };
+
+    const request = async (method, path, body, outId) => {
+      try {
+        const res = await fetch(path, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: body ? JSON.stringify(body) : undefined
+        });
+
+        const text = await res.text();
+        let payload = text;
+        if (text && (text.startsWith("{") || text.startsWith("["))) {
+          try { payload = JSON.parse(text); } catch {}
+        }
+
+        out(outId, res.status, payload || "(empty response)");
+      } catch (err) {
+        out(outId, 0, { error: err.message || String(err) });
+      }
+    };
+
+    document.querySelectorAll("[data-clear]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.getElementById(btn.dataset.clear).textContent = "Ready.";
+      });
+    });
+
+    document.querySelector('[data-action="demo"]').addEventListener("click", () => {
+      const message = document.getElementById("demoMessage").value;
+      const conversationId = document.getElementById("demoConversationId").value.trim();
+      const body = conversationId ? { message, conversationId } : { message };
+      request("POST", "/agents/demo-aoai-agent", body, "demoOut");
+    });
+
+    document.querySelector('[data-action="foundryDemo"]').addEventListener("click", () => {
+      const message = document.getElementById("foundryDemoMessage").value;
+      const conversationId = document.getElementById("foundryDemoConversationId").value.trim();
+      const body = conversationId ? { message, conversationId } : { message };
+      request("POST", "/agents/demo-foundry-basic-agent", body, "foundryDemoOut");
+    });
+
+    document.querySelector('[data-action="memoryAgent"]').addEventListener("click", () => {
+      const message = document.getElementById("memoryMessage").value;
+      const userId = document.getElementById("memoryUserId").value.trim();
+      const conversationId = document.getElementById("memoryConversationId").value.trim();
+      const body = conversationId ? { message, userId, conversationId } : { message, userId };
+      request("POST", "/agents/foundryMemoryAgent", body, "memoryOut");
+    });
+
+    document.querySelector('[data-action="inspectMemory"]').addEventListener("click", () => {
+      const userId = encodeURIComponent(document.getElementById("inspectUserId").value.trim());
+      const topic = document.getElementById("inspectTopic").value.trim();
+      const qs = topic ? `?topic=${encodeURIComponent(topic)}` : "";
+      request("GET", `/users/${userId}/memory${qs}`, null, "inspectOut");
+    });
+
+    document.querySelector('[data-action="deleteMemory"]').addEventListener("click", () => {
+      const userId = encodeURIComponent(document.getElementById("deleteUserId").value.trim());
+      request("DELETE", `/users/${userId}/memory`, null, "deleteOut");
+    });
+
+    document.querySelector('[data-action="history"]').addEventListener("click", () => {
+      const conversationId = encodeURIComponent(document.getElementById("historyConversationId").value.trim());
+      if (!conversationId) {
+        out("utilityOut", 400, { error: "Conversation ID is required." });
+        return;
+      }
+      request("GET", `/conversations/${conversationId}/history`, null, "utilityOut");
+    });
+
+    document.querySelector('[data-action="health"]').addEventListener("click", () => {
+      request("GET", "/health", null, "utilityOut");
+    });
+  </script>
+</body>
+</html>
