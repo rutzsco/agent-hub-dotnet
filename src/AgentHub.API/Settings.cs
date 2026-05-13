@@ -5,6 +5,7 @@ namespace AgentHub.API;
 public class Settings
 {
     public required Uri AzureAIProjectEndpoint { get; init; }
+    public Uri? AzureOpenAIEndpoint { get; init; }
     public string AzureAIModelDeploymentName { get; init; } = "gpt-4o-mini";
     public string? FoundryAgentName { get; init; }
     public string MemoryStoreName { get; init; } = "agent-hub-memory";
@@ -26,6 +27,15 @@ public class Settings
         var modelDeploymentName = agentHubSection["AzureAIModelDeploymentName"]
             ?? configuration["AZURE_AI_MODEL_DEPLOYMENT_NAME"]
             ?? "gpt-4o-mini";
+
+        var azureOpenAIEndpointValue = agentHubSection["AzureOpenAIEndpoint"]
+            ?? configuration["AZURE_OPENAI_ENDPOINT"];
+
+        Uri? azureOpenAIEndpoint = null;
+        if (!string.IsNullOrWhiteSpace(azureOpenAIEndpointValue))
+        {
+            azureOpenAIEndpoint = new Uri(azureOpenAIEndpointValue);
+        }
 
         var foundryAgentName = agentHubSection["FoundryAgentName"]
             ?? configuration["AZURE_AI_FOUNDRY_AGENT_NAME"];
@@ -55,6 +65,7 @@ public class Settings
         return new Settings
         {
             AzureAIProjectEndpoint = new Uri(endpoint),
+            AzureOpenAIEndpoint = azureOpenAIEndpoint,
             AzureAIModelDeploymentName = modelDeploymentName,
             FoundryAgentName = foundryAgentName,
             MemoryStoreName = memoryStoreName,

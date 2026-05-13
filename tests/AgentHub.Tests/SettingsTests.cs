@@ -11,6 +11,7 @@ public class SettingsTests
         var config = BuildConfig(new Dictionary<string, string?>
         {
             ["AgentHub:AzureAIProjectEndpoint"] = "https://test.services.ai.azure.com/api/projects/proj1",
+            ["AgentHub:AzureOpenAIEndpoint"] = "https://test-openai.openai.azure.com/",
             ["AgentHub:AzureAIModelDeploymentName"] = "gpt-4o",
             ["AgentHub:FoundryAgentName"] = "test-agent",
             ["AgentHub:MemoryStoreName"] = "test-memory",
@@ -24,6 +25,7 @@ public class SettingsTests
         var settings = Settings.Load(config);
 
         Assert.Equal(new Uri("https://test.services.ai.azure.com/api/projects/proj1"), settings.AzureAIProjectEndpoint);
+        Assert.Equal(new Uri("https://test-openai.openai.azure.com/"), settings.AzureOpenAIEndpoint);
         Assert.Equal("gpt-4o", settings.AzureAIModelDeploymentName);
         Assert.Equal("test-agent", settings.FoundryAgentName);
         Assert.Equal("test-memory", settings.MemoryStoreName);
@@ -44,6 +46,7 @@ public class SettingsTests
 
         var settings = Settings.Load(config);
 
+        Assert.Null(settings.AzureOpenAIEndpoint);
         Assert.Equal("gpt-4o-mini", settings.AzureAIModelDeploymentName);
         Assert.Null(settings.FoundryAgentName);
         Assert.Equal("agent-hub-memory", settings.MemoryStoreName);
@@ -60,6 +63,7 @@ public class SettingsTests
         var config = BuildConfig(new Dictionary<string, string?>
         {
             ["AZURE_AI_PROJECT_ENDPOINT"] = "https://env.services.ai.azure.com/api/projects/proj1",
+            ["AZURE_OPENAI_ENDPOINT"] = "https://env-openai.openai.azure.com/",
             ["AZURE_AI_MODEL_DEPLOYMENT_NAME"] = "gpt-4o-env",
             ["AZURE_AI_FOUNDRY_AGENT_NAME"] = "env-agent",
             ["AZURE_AI_MEMORY_STORE_NAME"] = "env-memory",
@@ -73,6 +77,7 @@ public class SettingsTests
         var settings = Settings.Load(config);
 
         Assert.Equal(new Uri("https://env.services.ai.azure.com/api/projects/proj1"), settings.AzureAIProjectEndpoint);
+        Assert.Equal(new Uri("https://env-openai.openai.azure.com/"), settings.AzureOpenAIEndpoint);
         Assert.Equal("gpt-4o-env", settings.AzureAIModelDeploymentName);
         Assert.Equal("env-agent", settings.FoundryAgentName);
         Assert.Equal("env-memory", settings.MemoryStoreName);
@@ -115,6 +120,8 @@ public class SettingsTests
         {
             ["AgentHub:AzureAIProjectEndpoint"] = "https://section.services.ai.azure.com/api/projects/proj1",
             ["AZURE_AI_PROJECT_ENDPOINT"] = "https://env.services.ai.azure.com/api/projects/proj1",
+            ["AgentHub:AzureOpenAIEndpoint"] = "https://section-openai.openai.azure.com/",
+            ["AZURE_OPENAI_ENDPOINT"] = "https://env-openai.openai.azure.com/",
             ["AgentHub:Cosmos:AccountEndpoint"] = "https://section.documents.azure.com:443/",
             ["COSMOS_ACCOUNT_ENDPOINT"] = "https://env.documents.azure.com:443/",
             ["AgentHub:Cosmos:DatabaseName"] = "section-db",
@@ -124,6 +131,7 @@ public class SettingsTests
         var settings = Settings.Load(config);
 
         Assert.Equal(new Uri("https://section.services.ai.azure.com/api/projects/proj1"), settings.AzureAIProjectEndpoint);
+    Assert.Equal(new Uri("https://section-openai.openai.azure.com/"), settings.AzureOpenAIEndpoint);
         Assert.Equal("https://section.documents.azure.com:443/", settings.CosmosAccountEndpoint);
         Assert.Equal("section-db", settings.CosmosDatabaseName);
     }

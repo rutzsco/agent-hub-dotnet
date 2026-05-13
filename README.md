@@ -175,8 +175,10 @@ Response:
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - An Azure AI Foundry project with a deployed model
+- An Azure OpenAI resource endpoint for `demo-aoai-agent` (for example `https://<resource>.openai.azure.com/`)
 - Azure sign-in available to `DefaultAzureCredential` such as `az login`
 - A PostgreSQL server reachable from the API
+- For `demo-aoai-agent`: your signed-in identity must have **Cognitive Services OpenAI User** on the Azure OpenAI resource configured in `AzureOpenAIEndpoint`
 - For `foundryMemoryAgent`: the Foundry project's managed identity must have the **Cognitive Services OpenAI User** role on the Azure OpenAI resource hosting the `text-embedding-3-small` deployment
 
 ## Configuration
@@ -194,6 +196,7 @@ The application uses the `AgentHub` configuration section.
 | Setting | Required | Description |
 |--------|----------|-------------|
 | `AgentHub:AzureAIProjectEndpoint` | Yes | Azure AI Foundry project endpoint |
+| `AgentHub:AzureOpenAIEndpoint` | Yes (for `demo-aoai-agent`) | Azure OpenAI resource endpoint used by `AzureOpenAIClient` (for example `https://<resource>.openai.azure.com/`) |
 | `AgentHub:AzureAIModelDeploymentName` | Yes | Model deployment name in the Foundry project |
 | `AgentHub:FoundryAgentName` | No | Name of the Foundry-managed agent; defaults to `DemoAgent` when omitted |
 | `AgentHub:MemoryStoreName` | No | Foundry memory store name for `foundryMemoryAgent`; defaults to `agent-hub-memory` |
@@ -223,6 +226,7 @@ Option 2: individual properties
 Environment variable fallbacks are also supported:
 
 - `AZURE_AI_PROJECT_ENDPOINT`
+- `AZURE_OPENAI_ENDPOINT`
 - `AZURE_AI_MODEL_DEPLOYMENT_NAME`
 - `AZURE_AI_FOUNDRY_AGENT_NAME`
 - `AZURE_AI_MEMORY_STORE_NAME`
@@ -251,6 +255,7 @@ Use placeholder values similar to the following in `src/AgentHub.API/appsettings
   },
   "AgentHub": {
     "AzureAIProjectEndpoint": "https://<resource>.services.ai.azure.com/api/projects/<project>",
+    "AzureOpenAIEndpoint": "https://<resource>.openai.azure.com/",
     "AzureAIModelDeploymentName": "gpt-4o-mini",
     "FoundryAgentName": "foundry-demo-agent",
     "MemoryStoreName": "agent-hub-memory",
