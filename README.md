@@ -165,8 +165,9 @@ The application uses the `AgentHub` configuration section.
 
 | Setting | Required | Description |
 |--------|----------|-------------|
-| `AgentHub:AzureAIProjectEndpoint` | Yes | Azure AI Foundry project endpoint |
+| `AgentHub:AzureAIProjectEndpoint` | For Foundry routes | Azure AI Foundry project endpoint. If omitted, Foundry-backed endpoints return a configuration error when invoked. |
 | `AgentHub:AzureAIModelDeploymentName` | Yes | Model deployment name in the Foundry project |
+| `AgentHub:ApimSubscriptionKey` | No | APIM subscription key for Azure OpenAI calls through APIM; also supported by `APIM_SUBSCRIPTION_KEY` |
 | `AgentHub:FoundryAgentName` | No | Name of the Foundry-managed agent; defaults to `DemoAgent` when omitted |
 | `AgentHub:MemoryStoreName` | No | Foundry memory store name for `foundryMemoryAgent`; defaults to `agent-hub-memory` |
 | `AgentHub:MemoryEmbeddingModel` | No | Embedding deployment/model for Foundry memory store; defaults to `text-embedding-3-small` |
@@ -196,6 +197,7 @@ Environment variable fallbacks are also supported:
 
 - `AZURE_AI_PROJECT_ENDPOINT`
 - `AZURE_AI_MODEL_DEPLOYMENT_NAME`
+- `APIM_SUBSCRIPTION_KEY`
 - `AZURE_AI_FOUNDRY_AGENT_NAME`
 - `AZURE_AI_MEMORY_STORE_NAME`
 - `AZURE_AI_MEMORY_EMBEDDING_MODEL`
@@ -224,6 +226,7 @@ Use placeholder values similar to the following in `src/AgentHub.API/appsettings
   "AgentHub": {
     "AzureAIProjectEndpoint": "https://<resource>.services.ai.azure.com/api/projects/<project>",
     "AzureAIModelDeploymentName": "gpt-4o-mini",
+    "ApimSubscriptionKey": "<apim-subscription-key>",
     "FoundryAgentName": "foundry-demo-agent",
     "MemoryStoreName": "agent-hub-memory",
     "MemoryEmbeddingModel": "text-embedding-3-small",

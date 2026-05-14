@@ -50,7 +50,7 @@ public static class FoundryMemoryAgent
             settings.MemoryStoreName,
             settings.MemoryEmbeddingModel);
 
-        var client = new AIProjectClient(settings.AzureAIProjectEndpoint, new DefaultAzureCredential());
+        var client = new AIProjectClient(settings.RequireAzureAIProjectEndpoint(), new DefaultAzureCredential());
         var memoryClient = client.GetAIProjectMemoryStoresClient();
 
         var memoryStore = await GetOrCreateMemoryStoreAsync(memoryClient, settings, logger);

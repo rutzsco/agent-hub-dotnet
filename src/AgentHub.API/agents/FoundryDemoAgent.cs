@@ -23,7 +23,7 @@ public static class FoundryDemoAgent
             settings.AzureAIModelDeploymentName,
             settings.FoundryAgentName ?? DefaultName);
 
-        var client = new AIProjectClient(settings.AzureAIProjectEndpoint, new DefaultAzureCredential());
+        var client = new AIProjectClient(settings.RequireAzureAIProjectEndpoint(), new DefaultAzureCredential());
         var agentName = settings.FoundryAgentName ?? DefaultName;
 
         ValidateAgentName(agentName);

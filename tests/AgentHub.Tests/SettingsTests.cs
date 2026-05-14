@@ -14,6 +14,7 @@ public class SettingsTests
             ["AgentHub:AzureOpenAIEndpoint"] = "https://test.openai.azure.com/",
             ["AgentHub:AzureAIModelDeploymentName"] = "gpt-4o",
             ["AgentHub:AzureAIApiKey"] = "section-key",
+            ["AgentHub:ApimSubscriptionKey"] = "section-apim-key",
             ["AgentHub:FoundryAgentName"] = "test-agent",
             ["AgentHub:MemoryStoreName"] = "test-memory",
             ["AgentHub:MemoryEmbeddingModel"] = "text-embedding-ada-002",
@@ -26,6 +27,7 @@ public class SettingsTests
         Assert.Equal(new Uri("https://test.openai.azure.com/"), settings.AzureOpenAIEndpoint);
         Assert.Equal("gpt-4o", settings.AzureAIModelDeploymentName);
         Assert.Equal("section-key", settings.AzureAIApiKey);
+        Assert.Equal("section-apim-key", settings.ApimSubscriptionKey);
         Assert.Equal("test-agent", settings.FoundryAgentName);
         Assert.Equal("test-memory", settings.MemoryStoreName);
         Assert.Equal("text-embedding-ada-002", settings.MemoryEmbeddingModel);
@@ -46,6 +48,7 @@ public class SettingsTests
         Assert.Equal("gpt-4o-mini", settings.AzureAIModelDeploymentName);
         Assert.Null(settings.AzureOpenAIEndpoint);
         Assert.Null(settings.AzureAIApiKey);
+        Assert.Null(settings.ApimSubscriptionKey);
         Assert.Null(settings.FoundryAgentName);
         Assert.Equal("agent-hub-memory", settings.MemoryStoreName);
         Assert.Equal("text-embedding-3-small", settings.MemoryEmbeddingModel);
@@ -60,6 +63,7 @@ public class SettingsTests
             ["AZURE_OPENAI_ENDPOINT"] = "https://env.openai.azure.com/",
             ["AZURE_AI_MODEL_DEPLOYMENT_NAME"] = "gpt-4o-env",
             ["AZURE_AI_API_KEY"] = "env-key",
+            ["APIM_SUBSCRIPTION_KEY"] = "env-apim-key",
             ["AZURE_AI_FOUNDRY_AGENT_NAME"] = "env-agent",
             ["AZURE_AI_MEMORY_STORE_NAME"] = "env-memory",
             ["AZURE_AI_MEMORY_EMBEDDING_MODEL"] = "env-embed",
@@ -72,20 +76,68 @@ public class SettingsTests
         Assert.Equal(new Uri("https://env.openai.azure.com/"), settings.AzureOpenAIEndpoint);
         Assert.Equal("gpt-4o-env", settings.AzureAIModelDeploymentName);
         Assert.Equal("env-key", settings.AzureAIApiKey);
+        Assert.Equal("env-apim-key", settings.ApimSubscriptionKey);
         Assert.Equal("env-agent", settings.FoundryAgentName);
         Assert.Equal("env-memory", settings.MemoryStoreName);
         Assert.Equal("env-embed", settings.MemoryEmbeddingModel);
     }
 
     [Fact]
-    public void Load_ThrowsWhenEndpointMissing()
+    public void Load_BlankSectionValues_FallBackToEnvironmentVariablesAndDefaults()
+    {
+        var config = BuildConfig(new Dictionary<string, string?>
+        {
+            ["AgentHub:AzureAIProjectEndpoint"] = "",
+            ["AZURE_AI_PROJECT_ENDPOINT"] = "https://env.services.ai.azure.com/api/projects/proj1",
+            ["AgentHub:AzureOpenAIEndpoint"] = "",
+            ["AZURE_OPENAI_ENDPOINT"] = "https://env.openai.azure.com/",
+            ["AgentHub:AzureAIModelDeploymentName"] = "",
+            ["AZURE_AI_MODEL_DEPLOYMENT_NAME"] = "gpt-4o-env",
+            ["AgentHub:FoundryAgentName"] = "",
+            ["AZURE_AI_FOUNDRY_AGENT_NAME"] = "env-agent",
+            ["AgentHub:MemoryStoreName"] = "",
+            ["AgentHub:MemoryEmbeddingModel"] = "",
+            ["AgentHub:Postgres:ConnectionString"] = "",
+            ["POSTGRES_CONNECTION_STRING"] = "Host=envhost;Database=envdb"
+        });
+
+        var settings = Settings.Load(config);
+
+        Assert.Equal(new Uri("https://env.services.ai.azure.com/api/projects/proj1"), settings.AzureAIProjectEndpoint);
+        Assert.Equal(new Uri("https://env.openai.azure.com/"), settings.AzureOpenAIEndpoint);
+        Assert.Equal("gpt-4o-env", settings.AzureAIModelDeploymentName);
+        Assert.Equal("env-agent", settings.FoundryAgentName);
+        Assert.Equal("agent-hub-memory", settings.MemoryStoreName);
+        Assert.Equal("text-embedding-3-small", settings.MemoryEmbeddingModel);
+        Assert.Equal("Host=envhost;Database=envdb", settings.PostgresConnectionString);
+    }
+
+    [Fact]
+    public void Load_AllowsMissingFoundryEndpoint()
     {
         var config = BuildConfig(new Dictionary<string, string?>
         {
             ["AgentHub:Postgres:ConnectionString"] = "Host=localhost;Database=test"
         });
 
-        Assert.Throws<InvalidOperationException>(() => Settings.Load(config));
+        var settings = Settings.Load(config);
+
+        Assert.Null(settings.AzureAIProjectEndpoint);
+        Assert.Throws<InvalidOperationException>(settings.RequireAzureAIProjectEndpoint);
+    }
+
+    [Fact]
+    public void RequireAzureOpenAIEndpoint_UsesAzureOpenAIEndpointFirst()
+    {
+        var config = BuildConfig(new Dictionary<string, string?>
+        {
+            ["AgentHub:AzureOpenAIEndpoint"] = "https://test.openai.azure.com/",
+            ["AgentHub:AzureAIProjectEndpoint"] = "https://test.services.ai.azure.com/api/projects/proj1"
+        });
+
+        var settings = Settings.Load(config);
+
+        Assert.Equal(new Uri("https://test.openai.azure.com/"), settings.RequireAzureOpenAIEndpoint());
     }
 
     [Fact]
@@ -151,6 +203,8 @@ public class SettingsTests
             ["AZURE_OPENAI_ENDPOINT"] = "https://env.openai.azure.com/",
             ["AgentHub:AzureAIApiKey"] = "section-key",
             ["AZURE_AI_API_KEY"] = "env-key",
+            ["AgentHub:ApimSubscriptionKey"] = "section-apim-key",
+            ["APIM_SUBSCRIPTION_KEY"] = "env-apim-key",
             ["AgentHub:Postgres:ConnectionString"] = "Host=localhost;Database=test"
         });
 
@@ -159,6 +213,7 @@ public class SettingsTests
         Assert.Equal(new Uri("https://section.services.ai.azure.com/api/projects/proj1"), settings.AzureAIProjectEndpoint);
         Assert.Equal(new Uri("https://section.openai.azure.com/"), settings.AzureOpenAIEndpoint);
         Assert.Equal("section-key", settings.AzureAIApiKey);
+        Assert.Equal("section-apim-key", settings.ApimSubscriptionKey);
     }
 
     private static IConfiguration BuildConfig(Dictionary<string, string?> values)

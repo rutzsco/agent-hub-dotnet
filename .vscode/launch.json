@@ -1,0 +1,23 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Launch AgentHub API",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build AgentHub API",
+      "program": "${workspaceFolder}/src/AgentHub.API/bin/Debug/net10.0/AgentHub.API.exe",
+      "args": [],
+      "cwd": "${workspaceFolder}/src/AgentHub.API",
+      "stopAtEntry": false,
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+      },
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://localhost:5023"
+      }
+    }
+  ]
+}
