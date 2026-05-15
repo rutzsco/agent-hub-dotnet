@@ -17,7 +17,7 @@ public static class DemoAzureOpenAIAgent
                 "Demo AOAI agent requires a dedicated Azure OpenAI endpoint. Set AgentHub:AzureOpenAIEndpoint or AZURE_OPENAI_ENDPOINT, and ensure your signed-in identity has the 'Cognitive Services OpenAI User' role on that Azure OpenAI resource.");
         }
 
-        return new AzureOpenAIClient(settings.AzureOpenAIEndpoint, new DefaultAzureCredential())
+        return new AzureOpenAIClient(settings.AzureOpenAIEndpoint, settings.CreateAzureCredential())
             .GetChatClient(settings.AzureAIModelDeploymentName)
             .AsIChatClient()
             .AsAIAgent(

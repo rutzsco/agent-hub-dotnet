@@ -2,6 +2,7 @@ using AgentHub.API.Agents;
 using AgentHub.API.services.conversations;
 using AgentHub.API.services.session;
 using AgentHub.API.Services.Memory;
+using AgentHub.API.Services.Skills.Validation;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Foundry;
 
@@ -14,6 +15,7 @@ public static class AgentHubServiceCollectionExtensions
         services.AddSingleton(settings);
         services.AddAgents(settings);
         services.AddConversationServices(settings);
+        services.AddSkills();
 
         return services;
     }
@@ -81,6 +83,13 @@ public static class AgentHubServiceCollectionExtensions
         }
 
         services.AddSingleton<IConversationSessionManager, ConversationSessionManager>();
+
+        return services;
+    }
+
+    private static IServiceCollection AddSkills(this IServiceCollection services)
+    {
+        services.AddSingleton<PromptValidationSkill>();
 
         return services;
     }

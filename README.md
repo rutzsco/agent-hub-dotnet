@@ -17,6 +17,22 @@ The API exposes three agent routes with two memory models.
 - These two routes persist turns in PostgreSQL and can replay history after restart
 - `POST /agents/foundryMemoryAgent` accepts `message`, `userId`, and optional `conversationId`
 - This route uses a Foundry memory store and relies on Foundry-managed memory behaviors
+- All prompts sent to `foundryMemoryAgent` are validated for security before processing
+
+## Security Features
+
+### Prompt Validation Skill
+
+The Foundry Memory Agent includes a **Prompt Validation Skill** that provides comprehensive safety validation before prompts are processed. This skill detects and blocks:
+
+- **Prompt Injection** - Attempts to override system instructions (e.g., "ignore previous instructions", "system: ignore")
+- **Jailbreak Attempts** - Patterns that try to bypass safety constraints (e.g., "DAN mode", "developer mode")
+- **Role Manipulation** - Attempts to alter agent behavior (e.g., "pretend to be", "forget you are")
+- **Input Quality Issues** - Invalid characters, excessive repetition, length violations
+
+When validation fails, the API returns a `400 Bad Request` with a descriptive error message explaining why the prompt was rejected.
+
+For detailed documentation on the validation skill, see [`src/AgentHub.API/services/skills/validation/README.md`](src/AgentHub.API/services/skills/validation/README.md).
 
 ## Agents
 
@@ -56,6 +72,8 @@ The solution is a single ASP.NET Core project with organized subfolders.
 | `src/AgentHub.API/agents/` | Agent implementations (DemoAgent, FoundryDemoAgent, FoundryMemoryAgent) |
 | `src/AgentHub.API/persistence/` | PostgreSQL conversation history storage and memory audit trail |
 | `src/AgentHub.API/session/` | In-memory session tracking and history-based session rehydration |
+| `src/AgentHub.API/services/skills/` | Reusable skills for agent flows (validation, etc.) |
+| `tests/AgentHub.Tests/` | Unit and integration tests |
 
 ## Memory Model
 
@@ -109,6 +127,23 @@ Notes:
 - The content filter decision is based on the effective prompt, which can include current message text, resumed conversation thread context, and memory retrieved by `FoundryMemoryProvider`.
 - A request can fail on a resumed conversation even if the latest user message appears safe in isolation.
 - To isolate context-related blocks, test with a new `conversationId` and, if needed, a different `userId`.
+
+### Prompt Validation Errors
+
+Before reaching Azure OpenAI, prompts are validated by the Prompt Validation Skill. If validation fails, the API returns `400 Bad Request` with an error message:
+
+```json
+"Potential prompt injection detected. The message contains patterns that attempt to override system instructions."
+```
+
+Common validation error examples:
+
+- `"Message cannot be empty."`
+- `"Message exceeds maximum length of 4000 characters (current: 4523)."`
+- `"Invalid control characters detected in the message."`
+- `"Potential jailbreak attempt detected. The message contains patterns that attempt to bypass safety constraints."`
+
+To debug validation failures, check the server logs for the specific validation rule that failed.
 
 ## Foundry Memory Conversation Flow
 
@@ -414,6 +449,14 @@ src/
       MemoryAuditService.cs
     routes/
       AgentRoutes.cs
+    services/
+      skills/
+        ISkill.cs
+        validation/
+          PromptValidationSkill.cs
+          PromptValidationResult.cs
+          ValidationRule.cs
+          README.md
     persistence/
       ConversationMessage.cs
       IConversationHistoryRepository.cs
@@ -428,7 +471,8 @@ src/
       IConversationSessionManager.cs
 tests/
   AgentHub.Tests/
-    (all test files)
+    PromptValidationSkillTests.cs
+    (other test files)
 ```
 
 ## Notes

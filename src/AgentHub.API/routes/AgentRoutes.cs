@@ -5,6 +5,7 @@ using AgentHub.API.services.conversations;
 using AgentHub.API.services.session;
 using AgentHub.API.Services;
 using AgentHub.API.Services.Memory;
+using AgentHub.API.Services.Skills.Validation;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Foundry;
 
@@ -93,6 +94,7 @@ public static partial class AgentRoutes
 
         app.MapPost("/agents/foundryMemoryAgent", async (
             FoundryMemoryContext memoryContext,
+            PromptValidationSkill validationSkill,
             MemoryAgentRequest request,
             HttpContext httpContext,
             ILoggerFactory loggerFactory,
@@ -112,6 +114,7 @@ public static partial class AgentRoutes
             {
                 var result = await FoundryMemoryAgent.ProcessMessage(
                     memoryContext,
+                    validationSkill,
                     request.Message,
                     request.UserId,
                     request.ConversationId,

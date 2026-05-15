@@ -8,6 +8,20 @@ public class Settings
     public Uri? AzureOpenAIEndpoint { get; init; }
     public string AzureAIModelDeploymentName { get; init; } = "gpt-4o-mini";
     public string? FoundryAgentName { get; init; }
+    public string? AzureTenantId { get; init; }
+
+    public Azure.Identity.DefaultAzureCredential CreateAzureCredential()
+    {
+        var options = new Azure.Identity.DefaultAzureCredentialOptions();
+        if (!string.IsNullOrWhiteSpace(AzureTenantId))
+        {
+            options.TenantId = AzureTenantId;
+            options.VisualStudioTenantId = AzureTenantId;
+            options.SharedTokenCacheTenantId = AzureTenantId;
+            options.InteractiveBrowserTenantId = AzureTenantId;
+        }
+        return new Azure.Identity.DefaultAzureCredential(options);
+    }
     public string MemoryStoreName { get; init; } = "agent-hub-memory";
     public string MemoryEmbeddingModel { get; init; } = "text-embedding-3-small";
     public string? CosmosAccountEndpoint { get; init; }
@@ -40,6 +54,9 @@ public class Settings
         var foundryAgentName = agentHubSection["FoundryAgentName"]
             ?? configuration["AZURE_AI_FOUNDRY_AGENT_NAME"];
 
+        var azureTenantId = agentHubSection["AzureTenantId"]
+            ?? configuration["AZURE_TENANT_ID"];
+
         var memoryStoreName = agentHubSection["MemoryStoreName"]
             ?? configuration["AZURE_AI_MEMORY_STORE_NAME"]
             ?? "agent-hub-memory";
@@ -68,6 +85,7 @@ public class Settings
             AzureOpenAIEndpoint = azureOpenAIEndpoint,
             AzureAIModelDeploymentName = modelDeploymentName,
             FoundryAgentName = foundryAgentName,
+            AzureTenantId = azureTenantId,
             MemoryStoreName = memoryStoreName,
             MemoryEmbeddingModel = memoryEmbeddingModel,
             CosmosAccountEndpoint = cosmosAccountEndpoint,
