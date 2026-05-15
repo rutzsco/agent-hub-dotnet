@@ -54,7 +54,10 @@ app.Use(async (context, next) =>
 
 app.MapHealthChecks("/health");
 app.MapOpenApi();
-app.UseDefaultFiles();
+app.UseDefaultFiles(new DefaultFilesOptions
+{
+    DefaultFileNames = new List<string> { "event-charter.html", "index.html" }
+});
 app.UseStaticFiles();
 app.UseSwaggerUI(options =>
 {
