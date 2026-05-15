@@ -212,3 +212,67 @@ sequenceDiagram
 
     Note over UI,Memory: First response on each thread sets that conversationId. Subsequent calls reuse it so Foundry memory and thread context are preserved per intent group.
 ```
+
+---
+
+## 5. KAI Agent — Decision Flow by Intent
+
+KAI is the Foundry memory agent driven by the system prompt in
+`AgentHub:MemoryAgentInstructions`. The UI sends a JSON envelope on every call;
+KAI branches on the `intent` field to choose its response format and which hard
+rules apply. This flowchart is the same logic whether the request comes from the
+Event Charter UI or any other client.
+
+```mermaid
+flowchart TD
+    Start([Incoming user message JSON envelope]) --> Validate[PromptValidationSkill checks for injection, jailbreak, length]
+    Validate -->|invalid| Reject[Return 400 Bad Request with reason]
+    Validate -->|valid| ScopeMem[Set asyncLocal userId so FoundryMemoryProvider scopes memory to this user]
+    ScopeMem --> Resume{conversationId provided}
+    Resume -->|no| NewSession[Create new Foundry session and thread]
+    Resume -->|yes| ResumeSession[Resume existing Foundry thread by conversationId]
+    NewSession --> Retrieve
+    ResumeSession --> Retrieve
+    Retrieve[FoundryMemoryProvider injects scoped long term memory before the run] --> Intent{intent}
+
+    Intent -->|field_help| FieldHelp[Apply framework rules for the named field. Output bullet tips and a Suggested wording blockquote tailored to currentValue and sectionValues]
+    Intent -->|review| ReviewPath[Run rubric against the framework for the named field. Emit pass fail warn lines and a revised Suggested wording. If currentValue is empty mark every rule as fail]
+    Intent -->|section_review| SectionReview[Critique every field in sectionValues. List what is missing, what could be sharper, end with the single most important next step]
+    Intent -->|chat| ChatPath[Reply in 1 to 3 paragraphs of plain prose. No rubric, no bullet tips, no Suggested wording. If user asks for form ready content redirect them to Ask AI or Review buttons]
+    Intent -->|freeform| Freeform[Answer userMessage directly while staying on topic of current section and field]
+
+    FieldHelp --> Guard
+    ReviewPath --> Guard
+    SectionReview --> Guard
+    ChatPath --> Guard
+    Freeform --> Guard
+
+    Guard{Hard rules check} --> G1[Never invent numbers. Prefix examples with Example colon]
+    Guard --> G2[Never duplicate values across Problem Statement and KPI fields. Problem Statement is narrative, KPI fields are atomic]
+    Guard --> G3[Do not propose solutions inside Problem Statement, only describe current state]
+    Guard --> G4[Reuse user words and numbers from sectionValues. Never reveal another user data]
+
+    G1 --> Persist
+    G2 --> Persist
+    G3 --> Persist
+    G4 --> Persist
+
+    Persist[FoundryMemoryProvider persists the new turn to the user scoped memory store] --> Respond([Return userId, response markdown, conversationId])
+
+    Reject:::err
+    classDef err fill:#fde2e1,stroke:#b23a2f,color:#7a1f17
+```
+
+### Notes
+
+- The same agent and same endpoint serve every intent. Only the system prompt
+  decides the response shape.
+- `field_help` and `review` always include a `> Suggested wording` blockquote so
+  the UI's `Use this` button has something to apply.
+- `chat` is the only intent that **suppresses** rubric/blockquote output, so
+  chat messages cannot be accidentally pasted into a charter field.
+- The hard rules block runs after the intent branch and before the response is
+  emitted. They are the guardrails that prevent the cross-field confusion bug
+  (e.g. recommending Problem Statement match KPI Actual).
+- Memory is **per `userId`** via `FoundryMemoryProvider`, independent of which
+  intent or which conversation thread is in use.
