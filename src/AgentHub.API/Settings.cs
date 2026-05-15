@@ -9,6 +9,7 @@ public class Settings
     public string AzureAIModelDeploymentName { get; init; } = "gpt-4o-mini";
     public string? FoundryAgentName { get; init; }
     public string? AzureTenantId { get; init; }
+    public string? MemoryAgentInstructions { get; init; }
 
     public Azure.Identity.DefaultAzureCredential CreateAzureCredential()
     {
@@ -57,6 +58,28 @@ public class Settings
         var azureTenantId = agentHubSection["AzureTenantId"]
             ?? configuration["AZURE_TENANT_ID"];
 
+        // MemoryAgentInstructions can be a single string or an array of strings (joined with newlines).
+        var instructionsSection = agentHubSection.GetSection("MemoryAgentInstructions");
+        string? memoryAgentInstructions = null;
+        if (instructionsSection.Exists())
+        {
+            if (instructionsSection.Value is { Length: > 0 } singleValue)
+            {
+                memoryAgentInstructions = singleValue;
+            }
+            else
+            {
+                var lines = instructionsSection.GetChildren()
+                    .Select(c => c.Value ?? string.Empty)
+                    .ToArray();
+                if (lines.Length > 0)
+                {
+                    memoryAgentInstructions = string.Join('\n', lines);
+                }
+            }
+        }
+        memoryAgentInstructions ??= configuration["AZURE_AI_MEMORY_AGENT_INSTRUCTIONS"];
+
         var memoryStoreName = agentHubSection["MemoryStoreName"]
             ?? configuration["AZURE_AI_MEMORY_STORE_NAME"]
             ?? "agent-hub-memory";
@@ -86,6 +109,7 @@ public class Settings
             AzureAIModelDeploymentName = modelDeploymentName,
             FoundryAgentName = foundryAgentName,
             AzureTenantId = azureTenantId,
+            MemoryAgentInstructions = memoryAgentInstructions,
             MemoryStoreName = memoryStoreName,
             MemoryEmbeddingModel = memoryEmbeddingModel,
             CosmosAccountEndpoint = cosmosAccountEndpoint,

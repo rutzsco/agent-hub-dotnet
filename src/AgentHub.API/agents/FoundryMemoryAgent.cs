@@ -368,7 +368,9 @@ public static class FoundryMemoryAgent
 
             var definition = new DeclarativeAgentDefinition(model: settings.AzureAIModelDeploymentName)
             {
-                Instructions = KaiCharterSystemPrompt
+                Instructions = string.IsNullOrWhiteSpace(settings.MemoryAgentInstructions)
+                    ? KaiCharterSystemPrompt
+                    : settings.MemoryAgentInstructions
             };
 
             var options = new ProjectsAgentVersionCreationOptions(definition);
