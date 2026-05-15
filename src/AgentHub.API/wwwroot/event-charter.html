@@ -417,6 +417,58 @@
       padding: 10px 12px;
       font-size: 13px;
     }
+
+    .chat-pane {
+      display: flex; flex-direction: column;
+      flex: 1; min-height: 0;
+    }
+    .chat-history {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 16px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .chat-bubble {
+      max-width: 85%;
+      padding: 8px 12px;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+    .chat-bubble.user {
+      align-self: flex-end;
+      background: var(--brand);
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+    .chat-bubble.assistant {
+      align-self: flex-start;
+      background: var(--surface-alt);
+      color: var(--ink);
+      border: 1px solid var(--border);
+      border-bottom-left-radius: 4px;
+    }
+    .chat-bubble.assistant.loading { font-style: italic; color: var(--muted); }
+    .chat-input-row {
+      display: flex; gap: 6px;
+      padding: 10px 16px 14px;
+      border-top: 1px solid var(--border);
+    }
+    .chat-input-row input {
+      flex: 1;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 13px;
+    }
+    .chat-input-row button {
+      background: var(--brand); color: #fff; border: 0;
+      padding: 8px 14px; border-radius: 6px; font-weight: 600;
+      cursor: pointer;
+    }
+    .chat-input-row button[disabled] { background: var(--muted); cursor: not-allowed; }
     .suggestion-list {
       display: flex; flex-direction: column; gap: 8px;
       margin-top: 10px;
@@ -784,9 +836,24 @@
       );
     }
 
-    function Assistant({ section, values, totalPercent, filledCount, totalCount, userId, onUserIdChange, aiState, onAskAiCurrentSection, onApplySuggestion }) {
+    function Assistant({ section, values, totalPercent, filledCount, totalCount, userId, onUserIdChange, aiState, onAskAiCurrentSection, onApplySuggestion, chatState, onChatSend }) {
       const [tab, setTab] = useState('ai');
       const [subTab, setSubTab] = useState('tips');
+      const [chatDraft, setChatDraft] = useState('');
+      const chatHistoryRef = React.useRef(null);
+
+      React.useEffect(() => {
+        if (tab === 'chat' && chatHistoryRef.current) {
+          chatHistoryRef.current.scrollTop = chatHistoryRef.current.scrollHeight;
+        }
+      }, [tab, chatState.messages.length, chatState.loading]);
+
+      const handleSendChat = () => {
+        const text = chatDraft.trim();
+        if (!text || chatState.loading) return;
+        setChatDraft('');
+        onChatSend(text);
+      };
 
       const nextSection = SECTIONS.find(s => sectionCompletion(s, values) < 1 && s.id !== section.id);
       const nextNote = nextSection
@@ -834,12 +901,12 @@
 
             <div className="tabs">
               <div className={"tab" + (tab === 'ai' ? " active" : "")} onClick={() => setTab('ai')}>✨ AI</div>
-              <div className={"tab" + (tab === 'suggest' ? " active" : "")} onClick={() => setTab('suggest')}>💡 Suggest</div>
               <div className={"tab" + (tab === 'chat' ? " active" : "")} onClick={() => setTab('chat')}>💬 Chat</div>
+              <div className={"tab" + (tab === 'suggest' ? " active" : "")} onClick={() => setTab('suggest')}>💡 Suggest</div>
               <div className={"tab" + (tab === 'guide' ? " active" : "")} onClick={() => setTab('guide')}>📘 Guide Me</div>
             </div>
 
-            {tab === 'ai' ? (
+            {tab === 'ai' && (
               <>
                 <div className="user-id-row">
                   <span>User ID:</span>
@@ -892,7 +959,45 @@
                   )}
                 </div>
               </>
-            ) : (
+            )}
+
+            {tab === 'chat' && (
+              <div className="chat-pane">
+                <div className="chat-history" ref={chatHistoryRef}>
+                  {chatState.messages.length === 0 && !chatState.loading && (
+                    <div className="ai-empty" style={{ padding: '4px 0' }}>
+                      Ask anything — the agent remembers this conversation across sections.
+                    </div>
+                  )}
+                  {chatState.messages.map((m, i) => (
+                    <div key={i} className={`chat-bubble ${m.role}`}>{m.content}</div>
+                  ))}
+                  {chatState.loading && (
+                    <div className="chat-bubble assistant loading">… thinking</div>
+                  )}
+                  {chatState.error && <div className="ai-error">{chatState.error}</div>}
+                </div>
+                <div className="chat-input-row">
+                  <input
+                    type="text"
+                    value={chatDraft}
+                    onChange={e => setChatDraft(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleSendChat(); }}
+                    placeholder="Type a message…"
+                    disabled={chatState.loading}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSendChat}
+                    disabled={chatState.loading || !chatDraft.trim()}
+                  >
+                    Send
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {(tab === 'suggest' || tab === 'guide') && (
               <>
                 <div className="all-fields">‹ All fields</div>
 
@@ -990,6 +1095,17 @@
       });
     }
 
+    function buildChatPrompt(section, values, userMessage) {
+      return JSON.stringify({
+        intent: 'chat',
+        section: { id: section.id, title: section.title },
+        field: null,
+        currentValue: '',
+        sectionValues: buildSectionValues(section, values),
+        userMessage,
+      });
+    }
+
     // Parse the agent's Markdown response into clickable suggestions.
     // Returns { primary: string|null, alternatives: string[] }.
     //   - primary: text from the "Suggested wording" blockquote (>) — the main paste-ready answer.
@@ -1077,6 +1193,13 @@
       const [askingFieldId, setAskingFieldId] = useState(null);
       const [reviewingFieldId, setReviewingFieldId] = useState(null);
       const [aiState, setAiState] = useState({ loading: false, response: '', error: '', fieldLabel: '', fieldId: null });
+      // Chat keeps its own conversationId so it doesn't pollute the field-help thread.
+      const [chatState, setChatState] = useState({
+        loading: false,
+        error: '',
+        conversationId: null,
+        messages: [], // [{ role: 'user' | 'assistant', content: string }]
+      });
 
       const sectionIndex = SECTIONS.findIndex(s => s.id === activeSectionId);
       const section = SECTIONS[sectionIndex];
@@ -1142,6 +1265,38 @@
         });
       };
 
+      const handleChatSend = async (userText) => {
+        if (!userId || !userId.trim()) {
+          setChatState(prev => ({ ...prev, error: 'Please set a User ID first.' }));
+          return;
+        }
+        setChatState(prev => ({
+          ...prev,
+          loading: true,
+          error: '',
+          messages: [...prev.messages, { role: 'user', content: userText }],
+        }));
+        try {
+          const result = await callFoundryMemoryAgent({
+            userId: userId.trim(),
+            message: buildChatPrompt(section, values, userText),
+            conversationId: chatState.conversationId,
+          });
+          setChatState(prev => ({
+            ...prev,
+            loading: false,
+            conversationId: result.conversationId ?? prev.conversationId,
+            messages: [...prev.messages, { role: 'assistant', content: result.response || '(empty response)' }],
+          }));
+        } catch (err) {
+          setChatState(prev => ({
+            ...prev,
+            loading: false,
+            error: err.message || String(err),
+          }));
+        }
+      };
+
       const goTo = (i) => {
         if (i < 0 || i >= SECTIONS.length) return;
         const s = SECTIONS[i];
@@ -1202,6 +1357,8 @@
             onApplySuggestion={(fieldId, text) => {
               if (fieldId) handleFieldChange(fieldId, text);
             }}
+            chatState={chatState}
+            onChatSend={handleChatSend}
           />
         </div>
       );
