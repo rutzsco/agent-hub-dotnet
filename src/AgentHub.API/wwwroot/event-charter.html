@@ -203,6 +203,17 @@
       text-transform: none;
       cursor: pointer;
     }
+    .field-block .review-pill-active {
+      background: #fff4d6;
+      border-color: #f1c349;
+      color: #6b4f00;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .field-block .review-pill-active:hover { background: #ffe9b0; }
+    .field-block .review-pill-active[disabled] {
+      background: var(--muted); color: #fff; border-color: var(--muted); cursor: wait;
+    }
     .field-block .ask-pill {
       display: inline-flex; gap: 5px; align-items: center;
       background: var(--brand);
@@ -405,6 +416,47 @@
       border-radius: 8px;
       padding: 10px 12px;
       font-size: 13px;
+    }
+    .suggestion-list {
+      display: flex; flex-direction: column; gap: 8px;
+      margin-top: 10px;
+    }
+    .suggestion-item {
+      display: flex; gap: 8px; align-items: flex-start;
+      background: #fff;
+      border: 1px solid #d8e0ff;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .suggestion-item.primary {
+      background: #eef2ff;
+      border-color: var(--brand);
+    }
+    .suggestion-item .text { flex: 1; white-space: pre-wrap; color: var(--ink); }
+    .suggestion-item .kind {
+      display: block;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .suggestion-item button {
+      flex-shrink: 0;
+      background: var(--brand);
+      color: #fff;
+      border: 0;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .suggestion-item button:hover { background: var(--brand-dark); }
+    .suggestion-item button[disabled] {
+      background: var(--muted); cursor: not-allowed;
     }
     .user-id-row {
       display: flex; gap: 8px; align-items: center;
@@ -618,14 +670,24 @@
       );
     }
 
-    function Field({ field, value, onChange, onAskAi, asking }) {
+    function Field({ field, value, onChange, onAskAi, onReview, asking, reviewing }) {
       const labelText = field.label.toUpperCase();
       return (
         <div className="field-block">
           <label>
             {labelText}
             <span className="label-actions">
-              {field.review && <span className="review-pill">💡 Review</span>}
+              {field.review && (
+                <button
+                  type="button"
+                  className="review-pill review-pill-active"
+                  disabled={reviewing}
+                  onClick={() => onReview(field)}
+                  title="Run a framework review on this field"
+                >
+                  {reviewing ? '… Reviewing' : '💡 Review'}
+                </button>
+              )}
               <button
                 type="button"
                 className="ask-pill"
@@ -646,7 +708,7 @@
       );
     }
 
-    function MainPanel({ section, sectionIndex, values, onFieldChange, onAskAi, askingFieldId, onPrev, onNext, prevLabel, nextLabel }) {
+    function MainPanel({ section, sectionIndex, values, onFieldChange, onAskAi, onReview, askingFieldId, reviewingFieldId, onPrev, onNext, prevLabel, nextLabel }) {
       const fullFields = section.fields.filter(f => f.full);
       const gridFields = section.fields.filter(f => !f.full);
       return (
@@ -676,7 +738,9 @@
                 value={values[f.id]}
                 onChange={onFieldChange}
                 onAskAi={onAskAi}
+                onReview={onReview}
                 asking={askingFieldId === f.id}
+                reviewing={reviewingFieldId === f.id}
               />
             ))}
 
@@ -689,7 +753,9 @@
                     value={values[f.id]}
                     onChange={onFieldChange}
                     onAskAi={onAskAi}
+                    onReview={onReview}
                     asking={askingFieldId === f.id}
+                    reviewing={reviewingFieldId === f.id}
                   />
                 ))}
               </div>
@@ -718,7 +784,7 @@
       );
     }
 
-    function Assistant({ section, values, totalPercent, filledCount, totalCount, userId, onUserIdChange, aiState, onAskAiCurrentSection }) {
+    function Assistant({ section, values, totalPercent, filledCount, totalCount, userId, onUserIdChange, aiState, onAskAiCurrentSection, onApplySuggestion }) {
       const [tab, setTab] = useState('ai');
       const [subTab, setSubTab] = useState('tips');
 
@@ -810,12 +876,19 @@
                     </div>
                   )}
                   {aiState.response && (
-                    <div className="ai-response">
-                      {aiState.fieldLabel && (
-                        <span className="ai-source">Re: {aiState.fieldLabel}</span>
-                      )}
-                      {aiState.response}
-                    </div>
+                    <>
+                      <div className="ai-response">
+                        {aiState.fieldLabel && (
+                          <span className="ai-source">Re: {aiState.fieldLabel}</span>
+                        )}
+                        {aiState.response}
+                      </div>
+                      <Suggestions
+                        suggestions={extractSuggestions(aiState.response)}
+                        fieldId={aiState.fieldId}
+                        onApply={(text) => onApplySuggestion(aiState.fieldId, text)}
+                      />
+                    </>
                   )}
                 </div>
               </>
@@ -906,6 +979,95 @@
       });
     }
 
+    function buildReviewPrompt(section, field, values, userMessage = '') {
+      return JSON.stringify({
+        intent: 'review',
+        section: { id: section.id, title: section.title },
+        field:   { id: field.id,   label: field.label },
+        currentValue: values[field.id] ?? '',
+        sectionValues: buildSectionValues(section, values),
+        userMessage,
+      });
+    }
+
+    // Parse the agent's Markdown response into clickable suggestions.
+    // Returns { primary: string|null, alternatives: string[] }.
+    //   - primary: text from the "Suggested wording" blockquote (>) — the main paste-ready answer.
+    //   - alternatives: bullet items from the "Tips for ..." list — shorter snippets the user
+    //     can also drop into the field as a starting point.
+    function extractSuggestions(markdown) {
+      if (!markdown || typeof markdown !== 'string') return { primary: null, alternatives: [] };
+
+      // Primary = consecutive blockquote lines (lines starting with "> ").
+      const lines = markdown.split(/\r?\n/);
+      const quoteLines = [];
+      let inQuote = false;
+      for (const line of lines) {
+        const m = line.match(/^\s*>\s?(.*)$/);
+        if (m) {
+          quoteLines.push(m[1]);
+          inQuote = true;
+        } else if (inQuote && line.trim() === '') {
+          // allow blank line inside quote
+          quoteLines.push('');
+        } else if (inQuote) {
+          break;
+        }
+      }
+      const primary = quoteLines.length > 0 ? quoteLines.join('\n').trim() : null;
+
+      // Alternatives = bullet lines ("- ..." or "* ...") that are not blockquotes.
+      const alternatives = [];
+      for (const line of lines) {
+        const m = line.match(/^\s*[-*]\s+(.+)$/);
+        if (m) {
+          const text = m[1].trim();
+          // strip leading bold markdown like **Tips for ...**
+          const cleaned = text.replace(/\*\*/g, '').trim();
+          if (cleaned.length > 0) alternatives.push(cleaned);
+        }
+      }
+
+      return { primary, alternatives };
+    }
+
+    function Suggestions({ suggestions, fieldId, onApply }) {
+      const { primary, alternatives } = suggestions;
+      if (!primary && alternatives.length === 0) return null;
+      const canApply = !!fieldId;
+      const applyTitle = canApply
+        ? 'Replace the field value with this suggestion'
+        : 'Open a specific field via "✨ Ask AI" to apply this suggestion';
+      return (
+        <div className="suggestion-list">
+          {primary && (
+            <div className="suggestion-item primary">
+              <div className="text">
+                <span className="kind">Suggested wording</span>
+                {primary}
+              </div>
+              <button
+                type="button"
+                disabled={!canApply}
+                title={applyTitle}
+                onClick={() => onApply(primary)}
+              >
+                Use this
+              </button>
+            </div>
+          )}
+          {alternatives.map((alt, i) => (
+            <div key={i} className="suggestion-item">
+              <div className="text">
+                <span className="kind">Tip {i + 1}</span>
+                {alt}
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
     function App() {
       const [activeSectionId, setActiveSectionId] = useState(SECTIONS[0].id);
       const [activeSub, setActiveSub] = useState(SECTIONS[0].subs?.[0]?.id);
@@ -913,7 +1075,8 @@
       const [userId, setUserId] = useState('demo-user');
       const [conversationId, setConversationId] = useState(null);
       const [askingFieldId, setAskingFieldId] = useState(null);
-      const [aiState, setAiState] = useState({ loading: false, response: '', error: '', fieldLabel: '' });
+      const [reviewingFieldId, setReviewingFieldId] = useState(null);
+      const [aiState, setAiState] = useState({ loading: false, response: '', error: '', fieldLabel: '', fieldId: null });
 
       const sectionIndex = SECTIONS.findIndex(s => s.id === activeSectionId);
       const section = SECTIONS[sectionIndex];
@@ -922,13 +1085,14 @@
         setValues(prev => ({ ...prev, [id]: value }));
       };
 
-      const askAgent = async ({ prompt, fieldLabel, fieldId }) => {
+      const askAgent = async ({ prompt, fieldLabel, fieldId, mode }) => {
         if (!userId || !userId.trim()) {
-          setAiState({ loading: false, response: '', error: 'Please set a User ID first.', fieldLabel });
+          setAiState({ loading: false, response: '', error: 'Please set a User ID first.', fieldLabel, fieldId: fieldId ?? null });
           return;
         }
-        setAskingFieldId(fieldId ?? null);
-        setAiState({ loading: true, response: '', error: '', fieldLabel });
+        if (mode === 'review') setReviewingFieldId(fieldId ?? null);
+        else setAskingFieldId(fieldId ?? null);
+        setAiState({ loading: true, response: '', error: '', fieldLabel, fieldId: fieldId ?? null });
         try {
           const result = await callFoundryMemoryAgent({
             userId: userId.trim(),
@@ -936,11 +1100,18 @@
             conversationId,
           });
           if (result.conversationId) setConversationId(result.conversationId);
-          setAiState({ loading: false, response: result.response || '(empty response)', error: '', fieldLabel });
+          setAiState({
+            loading: false,
+            response: result.response || '(empty response)',
+            error: '',
+            fieldLabel,
+            fieldId: fieldId ?? null,
+          });
         } catch (err) {
-          setAiState({ loading: false, response: '', error: err.message || String(err), fieldLabel });
+          setAiState({ loading: false, response: '', error: err.message || String(err), fieldLabel, fieldId: fieldId ?? null });
         } finally {
-          setAskingFieldId(null);
+          if (mode === 'review') setReviewingFieldId(null);
+          else setAskingFieldId(null);
         }
       };
 
@@ -949,6 +1120,16 @@
           prompt: buildFieldPrompt(section, field, values),
           fieldLabel: field.label,
           fieldId: field.id,
+          mode: 'ask',
+        });
+      };
+
+      const handleReviewField = (field) => {
+        askAgent({
+          prompt: buildReviewPrompt(section, field, values),
+          fieldLabel: `${field.label} (Review)`,
+          fieldId: field.id,
+          mode: 'review',
         });
       };
 
@@ -957,6 +1138,7 @@
           prompt: buildSectionPrompt(section, values),
           fieldLabel: section.title,
           fieldId: null,
+          mode: 'ask',
         });
       };
 
@@ -999,7 +1181,9 @@
             values={values}
             onFieldChange={handleFieldChange}
             onAskAi={handleAskAiForField}
+            onReview={handleReviewField}
             askingFieldId={askingFieldId}
+            reviewingFieldId={reviewingFieldId}
             onPrev={() => goTo(sectionIndex - 1)}
             onNext={() => goTo(sectionIndex + 1)}
             prevLabel={SECTIONS[sectionIndex - 1]?.title}
@@ -1015,6 +1199,9 @@
             onUserIdChange={setUserId}
             aiState={aiState}
             onAskAiCurrentSection={handleAskAiForSection}
+            onApplySuggestion={(fieldId, text) => {
+              if (fieldId) handleFieldChange(fieldId, text);
+            }}
           />
         </div>
       );
