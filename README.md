@@ -4,10 +4,12 @@ Agent Hub is a .NET 10 minimal API for hosting AI agents using Microsoft Agent F
 
 - A code-first agent built directly from an Azure AI Foundry model deployment
 - A Foundry-managed agent created and resolved through the Foundry project
-- A Foundry memory-backed agent that provisions a Foundry memory store
+- A Foundry memory-backed agent ("KAI") that provisions a Foundry memory store and is driven by a configurable system prompt
+- An interactive Event Charter web UI (React via CDN, no build pipeline) that talks to the memory agent
 - Conversation memory using `ConversationId` for demo and foundry-demo endpoints
-- PostgreSQL-backed conversation history persistence
+- Cosmos DB-backed conversation history persistence and memory deletion audit log
 - Restart-safe conversation rehydration from stored history
+- Tenant-aware authentication via `DefaultAzureCredential` with explicit tenant pinning
 
 ## What This Project Does
 
@@ -55,12 +57,61 @@ For detailed documentation on the validation skill, see [`src/AgentHub.API/servi
 
 ## Common API UI
 
-The project now includes a shared browser UI for testing all API routes from one page.
+The project ships with two browser UIs out of `src/AgentHub.API/wwwroot`:
 
-- URL: `/` (served from `src/AgentHub.API/wwwroot/index.html`)
-- Includes forms for all agent, memory inspect/delete, conversation history, and health endpoints
-- Displays HTTP status and JSON responses inline
-- Swagger remains available at `/swagger`
+- **Event Charter (default home page)** — `/` (served from `event-charter.html`)
+  - Interactive 6-section Kaizen Event Charter form: Summary & Schedule, Metrics & Deliverables, Daily Milestones, Team & On-Call, Obstacles & Resources, Sustainability Metrics.
+  - Each field has an **✨ Ask AI** button (and **💡 Review** for fields tagged for framework review) that calls `POST /agents/foundryMemoryAgent` with a structured JSON envelope (see [KAI System Prompt](#kai-system-prompt)).
+  - Right panel shows live progress (6 sections weighted equally), a clickable AI-suggestion list with **Use this** to populate the field, and a **💬 Chat** tab for free-form conversation with the agent (separate `conversationId` from per-field threads).
+  - Single-file React + Babel-standalone via CDN — no npm/build step.
+- **Legacy API console** — `/index.html`
+  - Forms for all agent, memory inspect/delete, conversation history, and health endpoints.
+  - Displays HTTP status and JSON responses inline.
+
+Swagger remains available at `/swagger`. `Program.cs` configures `UseDefaultFiles` to prefer `event-charter.html`, falling back to `index.html`.
+
+## KAI System Prompt
+
+The Foundry Memory Agent is configured with a structured system prompt ("KAI — the Kaizen Charter Guide") sourced from configuration so it can be edited without recompiling.
+
+- **Source of truth**: `AgentHub:MemoryAgentInstructions` in `appsettings.json` / `appsettings.Local.json`.
+  - Accepts either a single string or a JSON array of strings (joined with `\n` for readability).
+  - Falls back to the env var `AZURE_AI_MEMORY_AGENT_INSTRUCTIONS`.
+  - If config is empty, falls back to the `KaiCharterSystemPrompt` constant in `FoundryMemoryAgent.cs`.
+- **Request envelope**: the UI sends a JSON object as the agent message:
+
+  ```json
+  {
+    "intent": "field_help" | "review" | "section_review" | "chat" | "freeform",
+    "section": { "id": "...", "title": "..." },
+    "field":   { "id": "...", "label": "..." } | null,
+    "currentValue": "<what the user has typed>" | "",
+    "sectionValues": { "<fieldLabel>": "<value>", ... },
+    "userMessage": "<optional free text>" | ""
+  }
+  ```
+
+- **Response style by intent**:
+  - `field_help` — Markdown bullet tips + a `> Suggested wording` blockquote (paste-ready).
+  - `review` — Strict rubric (✅ / ❌ / ⚠️) per framework rule, plus a revised `> Suggested wording`.
+  - `section_review` — Critique of the whole section.
+  - `chat` — Plain conversational prose; no rubric, no paste-ready suggestions.
+  - `freeform` — Direct answer to `userMessage`, on-topic.
+
+### Important: instructions are baked at agent creation
+
+Foundry agent instructions are persisted on the server when the agent is first created. `GetOrCreateAgentAsync` only creates on a 404, so an existing agent keeps its original prompt. To roll out a new prompt:
+
+- Bump `AgentHub:FoundryAgentName` (e.g. `kai-charter-v1` → `kai-charter-v2`) so a fresh agent is created on next startup, **or**
+- Delete the existing agent in the Azure AI Foundry portal.
+
+## Tenant Configuration
+
+`DefaultAzureCredential` may default to your home tenant (e.g. Microsoft corp) even when the target Azure resource lives in a customer tenant, producing errors like `Tenant provided in token does not match resource token`. To avoid this, the project supports an explicit tenant override:
+
+- **Setting**: `AgentHub:AzureTenantId` (or env var `AZURE_TENANT_ID`).
+- When set, `Settings.CreateAzureCredential()` pins `TenantId`, `VisualStudioTenantId`, `SharedTokenCacheTenantId`, and `InteractiveBrowserTenantId` on `DefaultAzureCredentialOptions`.
+- Used by all three agents (`DemoAzureOpenAIAgent`, `FoundryDemoAgent`, `FoundryMemoryAgent`).
 
 ## Architecture
 
@@ -233,30 +284,24 @@ The application uses the `AgentHub` configuration section.
 | `AgentHub:AzureAIProjectEndpoint` | Yes | Azure AI Foundry project endpoint |
 | `AgentHub:AzureOpenAIEndpoint` | Yes (for `demo-aoai-agent`) | Azure OpenAI resource endpoint used by `AzureOpenAIClient` (for example `https://<resource>.openai.azure.com/`) |
 | `AgentHub:AzureAIModelDeploymentName` | Yes | Model deployment name in the Foundry project |
-| `AgentHub:FoundryAgentName` | No | Name of the Foundry-managed agent; defaults to `DemoAgent` when omitted |
+| `AgentHub:AzureTenantId` | No | Pins `DefaultAzureCredential` to a specific Entra tenant. Required when the target resource is in a different tenant than your default sign-in. |
+| `AgentHub:FoundryAgentName` | No | Name of the Foundry-managed agent; the memory agent uses `<FoundryAgentName>-memory`. **Bump this name to roll out a new system prompt.** |
 | `AgentHub:MemoryStoreName` | No | Foundry memory store name for `foundryMemoryAgent`; defaults to `agent-hub-memory` |
 | `AgentHub:MemoryEmbeddingModel` | No | Embedding deployment/model for Foundry memory store; defaults to `text-embedding-3-small` |
+| `AgentHub:MemoryAgentInstructions` | No | System prompt for the memory agent. Single string or array of strings (joined with `\n`). Falls back to the in-code `KaiCharterSystemPrompt` constant. |
 
-### PostgreSQL Settings
+### Cosmos DB Settings
 
-Use either a full connection string or individual connection properties.
-
-Option 1: full connection string
-
-| Setting | Required | Description |
-|--------|----------|-------------|
-| `AgentHub:Postgres:ConnectionString` | Yes | Full PostgreSQL connection string |
-
-Option 2: individual properties
+Conversation history and the memory deletion audit log are persisted to Azure Cosmos DB.
 
 | Setting | Required | Description |
 |--------|----------|-------------|
-| `AgentHub:Postgres:Host` | Yes | PostgreSQL server host |
-| `AgentHub:Postgres:Port` | No | PostgreSQL server port, default `5432` |
-| `AgentHub:Postgres:Database` | Yes | Database name |
-| `AgentHub:Postgres:Username` | Yes | Database username |
-| `AgentHub:Postgres:Password` | Yes | Database password |
-| `AgentHub:Postgres:SslMode` | No | PostgreSQL SSL mode, default `Prefer` |
+| `AgentHub:Cosmos:AccountEndpoint` | Yes | Cosmos DB account endpoint, e.g. `https://<account>.documents.azure.com:443/` |
+| `AgentHub:Cosmos:DatabaseName` | Yes | Cosmos database name |
+| `AgentHub:Cosmos:ConversationContainerName` | No | Container for conversation messages, default `conversation-messages` |
+| `AgentHub:Cosmos:MemoryAuditContainerName` | No | Container for memory deletion audit entries, default `memory-audit` |
+
+Authentication uses `DefaultAzureCredential` (RBAC), so assign **Cosmos DB Built-in Data Contributor** to the running identity — no connection strings or keys are needed.
 
 Environment variable fallbacks are also supported:
 
@@ -266,14 +311,12 @@ Environment variable fallbacks are also supported:
 - `AZURE_AI_FOUNDRY_AGENT_NAME`
 - `AZURE_AI_MEMORY_STORE_NAME`
 - `AZURE_AI_MEMORY_EMBEDDING_MODEL`
-- `POSTGRES_CONNECTION_STRING`
-- `POSTGRES_URL`
-- `POSTGRES_HOST`
-- `POSTGRES_PORT`
-- `POSTGRES_DATABASE`
-- `POSTGRES_USERNAME`
-- `POSTGRES_PASSWORD`
-- `POSTGRES_SSL_MODE`
+- `AZURE_AI_MEMORY_AGENT_INSTRUCTIONS`
+- `AZURE_TENANT_ID`
+- `COSMOS_ACCOUNT_ENDPOINT`
+- `COSMOS_DATABASE_NAME`
+- `COSMOS_CONVERSATION_CONTAINER_NAME`
+- `COSMOS_MEMORY_AUDIT_CONTAINER_NAME`
 
 ## Example Configuration
 
@@ -292,20 +335,21 @@ Use placeholder values similar to the following in `src/AgentHub.API/appsettings
     "AzureAIProjectEndpoint": "https://<resource>.services.ai.azure.com/api/projects/<project>",
     "AzureOpenAIEndpoint": "https://<resource>.openai.azure.com/",
     "AzureAIModelDeploymentName": "gpt-4o-mini",
-    "FoundryAgentName": "foundry-demo-agent",
+    "AzureTenantId": "<entra-tenant-guid>",
+    "FoundryAgentName": "kai-charter-v1",
     "MemoryStoreName": "agent-hub-memory",
     "MemoryEmbeddingModel": "text-embedding-3-small",
-    "Postgres": {
-      "Host": "<server>.postgres.database.azure.com",
-      "Port": "5432",
-      "Database": "<database>",
-      "Username": "<username>",
-      "Password": "<password>",
-      "SslMode": "Prefer"
+    "Cosmos": {
+      "AccountEndpoint": "https://<account>.documents.azure.com:443/",
+      "DatabaseName": "<database>",
+      "ConversationContainerName": "conversation-messages",
+      "MemoryAuditContainerName": "memory-audit"
     }
   }
 }
 ```
+
+> The full KAI system prompt lives under `AgentHub:MemoryAgentInstructions` as a JSON array of strings. See `appsettings.json` in the repo for the canonical version.
 
 ## Restore and Build
 
@@ -396,6 +440,8 @@ curl http://localhost:5023/health
 
 ## PostgreSQL Behavior
 
+> **Note:** Earlier versions of this project used PostgreSQL for persistence. The current implementation uses Azure Cosmos DB — see [Cosmos DB Settings](#cosmos-db-settings). The section below is retained for historical reference and may not match the running code.
+
 The persistence project automatically creates the required tables on first use.
 
 Tables created:
@@ -428,7 +474,9 @@ The API logs:
 - memory store creation and resolution flow
 - agent creation flow
 - session reuse and session rehydration
-- PostgreSQL initialization and persistence errors
+- Cosmos DB initialization and persistence errors
+
+Logs are written to the **console only** (no file sink). Under Visual Studio they appear in the Debug Output window; under `dotnet run` they go to the terminal; in App Service / containers they are picked up by the standard log stream.
 
 For development, set `AgentHub` logging to `Debug` in `appsettings.Development.json`.
 

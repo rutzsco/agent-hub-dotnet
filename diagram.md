@@ -1,17 +1,17 @@
 # Agent Hub — Sequence Diagrams
 
-## 1. `/agents/demo` — Direct Model Inference with PostgreSQL Memory
+## 1. `/agents/demo` — Direct Model Inference with Cosmos DB Memory
 
 ```mermaid
 sequenceDiagram
     participant Client
     participant Route as POST /agents/demo
-    participant SessionMgr as IConversationSessionManager<br/>(in-memory + PostgreSQL)
+    participant SessionMgr as IConversationSessionManager<br/>(in-memory + Cosmos DB)
     participant Agent as AIAgent<br/>(direct model inference)
-    participant Postgres as PostgreSQL
+    participant Cosmos as Azure Cosmos DB
     participant Foundry as Azure AI Foundry (model endpoint)
 
-    Note over SessionMgr,Postgres: Startup (once): Agent created inline via AIProjectClient.AsAIAgent(model,instructions)
+    Note over SessionMgr,Cosmos: Startup (once): Agent created inline via AIProjectClient.AsAIAgent(model,instructions)
 
     Client->>Route: POST {message, conversationId?}
 
@@ -21,8 +21,8 @@ sequenceDiagram
         Note over SessionMgr: Cache HIT — no history replay needed
     else new conversationId or session evicted
         Route->>SessionMgr: GetOrCreateSessionAsync(conversationId)
-        SessionMgr->>Postgres: Load conversation history
-        Postgres-->>SessionMgr: prior turns (user + assistant messages)
+        SessionMgr->>Cosmos: Query conversation messages container
+        Cosmos-->>SessionMgr: prior turns (user + assistant messages)
         SessionMgr->>Agent: CreateSessionAsync()
         Agent->>Foundry: Create new session
         Foundry-->>Agent: session
@@ -41,23 +41,23 @@ sequenceDiagram
     Agent-->>Route: AgentResponse
 
     Route->>SessionMgr: AppendTurnAsync(conversationId, message, response)
-    SessionMgr->>Postgres: Persist user + assistant turn
+    SessionMgr->>Cosmos: Upsert user + assistant turn documents
 
     Route-->>Client: 200 OK {conversationId, response}
 ```
 
 ---
 
-## 2. `/agents/foundry-demo` — Foundry-Managed Agent with PostgreSQL Memory
+## 2. `/agents/foundry-demo` — Foundry-Managed Agent with Cosmos DB Memory
 
 ```mermaid
 sequenceDiagram
     participant Client
     participant Route as POST /agents/foundry-demo
-    participant SessionMgr as IConversationSessionManager<br/>(in-memory + PostgreSQL)
+    participant SessionMgr as IConversationSessionManager<br/>(in-memory + Cosmos DB)
     participant Agent as FoundryAgent<br/>(declarative agent on Foundry)
     participant AgentAdmin as AgentAdministrationClient
-    participant Postgres as PostgreSQL
+    participant Cosmos as Azure Cosmos DB
     participant Foundry as Azure AI Foundry
 
     Note over AgentAdmin,Foundry: Startup (once): resolve or create Foundry agent by name via AgentAdministrationClient
@@ -80,8 +80,8 @@ sequenceDiagram
         Note over SessionMgr: Cache HIT — no history replay needed
     else new conversationId or session evicted
         Route->>SessionMgr: GetOrCreateSessionAsync(conversationId)
-        SessionMgr->>Postgres: Load conversation history
-        Postgres-->>SessionMgr: prior turns
+        SessionMgr->>Cosmos: Query conversation messages container
+        Cosmos-->>SessionMgr: prior turns
         SessionMgr->>Agent: CreateSessionAsync()
         Agent->>Foundry: Create new session/thread
         Foundry-->>Agent: session
@@ -100,7 +100,7 @@ sequenceDiagram
     Agent-->>Route: AgentResponse
 
     Route->>SessionMgr: AppendTurnAsync(conversationId, message, response)
-    SessionMgr->>Postgres: Persist user + assistant turn
+    SessionMgr->>Cosmos: Upsert user + assistant turn documents
 
     Route-->>Client: 200 OK {conversationId, response}
 ```
@@ -145,4 +145,70 @@ sequenceDiagram
         Foundry-->>Agent: HTTP 400 invalid_request_error: content_filter
         Route-->>Client: 400 Bad Request {error, code=content_filter}
     end
+```
+
+---
+
+## 4. Event Charter UI — KAI Intents over `/agents/foundryMemoryAgent`
+
+The `event-charter.html` SPA (served as the home page) drives the same memory agent endpoint
+with a structured JSON envelope. The `intent` field tells the system prompt how to format
+its reply. The UI keeps two independent threads: one for per-field interactions
+(`field_help` / `review` / `section_review`) and one for the Chat tab.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant UI as event-charter.html<br/>(React SPA)
+    participant Route as POST /agents/foundryMemoryAgent
+    participant Memory as FoundryMemoryAgent<br/>(KAI system prompt)
+    participant Foundry as Azure AI Foundry
+
+    Note over UI: Two conversation threads kept locally:<br/>• fieldConvId (Ask AI, Review, Section Review)<br/>• chatConvId (Chat tab)
+
+    alt User clicks ✨ Ask AI on a field
+        User->>UI: Click "✨ Ask AI" on <field>
+        UI->>UI: buildFieldPrompt(section, field, values)<br/>→ {intent:"field_help", section, field, currentValue, sectionValues}
+        UI->>Route: POST {userId, message:<json>, conversationId:fieldConvId}
+        Route->>Memory: ProcessMessage(...)
+        Memory->>Foundry: RunAsync(envelope) with KAI instructions
+        Foundry-->>Memory: Markdown: tips bullets + "> Suggested wording"
+        Memory-->>Route: {response, conversationId}
+        Route-->>UI: 200 OK
+        UI->>UI: extractSuggestions(markdown)<br/>render Suggestions panel
+        User->>UI: Click "Use this" on Suggested wording
+        UI->>UI: handleFieldChange(fieldId, primary text)
+        Note over UI: Field value updated → progress %<br/>and chips recomputed live
+    end
+
+    alt User clicks 💡 Review (e.g. Problem Statement)
+        User->>UI: Click "💡 Review" on <field>
+        UI->>UI: buildReviewPrompt(...)<br/>→ {intent:"review", ...}
+        UI->>Route: POST {..., conversationId:fieldConvId}
+        Memory->>Foundry: RunAsync(envelope)
+        Foundry-->>Memory: Rubric (✅/❌/⚠️) + revised "> Suggested wording"
+        Memory-->>UI: 200 OK
+        UI->>User: Show rubric + "Use this" to apply revised wording
+    end
+
+    alt User clicks ✨ Suggest tips for <section>
+        User->>UI: Click section-level Suggest button
+        UI->>UI: buildSectionPrompt(...)<br/>→ {intent:"section_review", field:null, ...}
+        UI->>Route: POST {..., conversationId:fieldConvId}
+        Foundry-->>Memory: Section critique markdown
+        Memory-->>UI: 200 OK
+        UI->>User: Render critique (no per-field "Use this")
+    end
+
+    alt User uses 💬 Chat tab
+        User->>UI: Type message, press Enter
+        UI->>UI: buildChatPrompt(section, values, userText)<br/>→ {intent:"chat", userMessage:userText, ...}
+        UI->>Route: POST {..., conversationId:chatConvId}
+        Memory->>Foundry: RunAsync(envelope)
+        Foundry-->>Memory: 1–3 paragraphs of plain prose<br/>(no rubric, no Suggested wording)
+        Memory-->>UI: 200 OK
+        UI->>User: Append assistant bubble to chat history
+    end
+
+    Note over UI,Memory: First response on each thread sets that thread's<br/>conversationId; subsequent calls reuse it so Foundry<br/>memory + thread context are preserved per intent group.
 ```
