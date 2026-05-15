@@ -164,51 +164,51 @@ sequenceDiagram
     participant Memory as FoundryMemoryAgent<br/>(KAI system prompt)
     participant Foundry as Azure AI Foundry
 
-    Note over UI: Two conversation threads kept locally:<br/>• fieldConvId (Ask AI, Review, Section Review)<br/>• chatConvId (Chat tab)
+    Note over UI: Two conversation threads kept locally. fieldConvId for Ask AI / Review / Section Review. chatConvId for the Chat tab.
 
-    alt User clicks ✨ Ask AI on a field
-        User->>UI: Click "✨ Ask AI" on <field>
-        UI->>UI: buildFieldPrompt(section, field, values)<br/>→ {intent:"field_help", section, field, currentValue, sectionValues}
-        UI->>Route: POST {userId, message:<json>, conversationId:fieldConvId}
-        Route->>Memory: ProcessMessage(...)
-        Memory->>Foundry: RunAsync(envelope) with KAI instructions
-        Foundry-->>Memory: Markdown: tips bullets + "> Suggested wording"
-        Memory-->>Route: {response, conversationId}
+    alt User clicks Ask AI on a field
+        User->>UI: Click Ask AI on a field
+        Note over UI: buildFieldPrompt(section, field, values) returns intent=field_help with section, field, currentValue, sectionValues
+        UI->>Route: POST userId, message, conversationId=fieldConvId
+        Route->>Memory: ProcessMessage
+        Memory->>Foundry: RunAsync envelope with KAI instructions
+        Foundry-->>Memory: Markdown tips bullets and Suggested wording blockquote
+        Memory-->>Route: response and conversationId
         Route-->>UI: 200 OK
-        UI->>UI: extractSuggestions(markdown)<br/>render Suggestions panel
-        User->>UI: Click "Use this" on Suggested wording
-        UI->>UI: handleFieldChange(fieldId, primary text)
-        Note over UI: Field value updated → progress %<br/>and chips recomputed live
+        Note over UI: extractSuggestions parses markdown and renders the Suggestions panel
+        User->>UI: Click Use this on Suggested wording
+        Note over UI: handleFieldChange writes the primary text into fieldId
+        Note over UI: Field value updated, progress percent and chips recomputed live
     end
 
-    alt User clicks 💡 Review (e.g. Problem Statement)
-        User->>UI: Click "💡 Review" on <field>
-        UI->>UI: buildReviewPrompt(...)<br/>→ {intent:"review", ...}
-        UI->>Route: POST {..., conversationId:fieldConvId}
-        Memory->>Foundry: RunAsync(envelope)
-        Foundry-->>Memory: Rubric (✅/❌/⚠️) + revised "> Suggested wording"
+    alt User clicks Review on a field
+        User->>UI: Click Review on a field
+        Note over UI: buildReviewPrompt returns intent=review
+        UI->>Route: POST with conversationId=fieldConvId
+        Memory->>Foundry: RunAsync envelope
+        Foundry-->>Memory: Rubric pass fail warn plus revised Suggested wording
         Memory-->>UI: 200 OK
-        UI->>User: Show rubric + "Use this" to apply revised wording
+        UI->>User: Show rubric and Use this to apply revised wording
     end
 
-    alt User clicks ✨ Suggest tips for <section>
-        User->>UI: Click section-level Suggest button
-        UI->>UI: buildSectionPrompt(...)<br/>→ {intent:"section_review", field:null, ...}
-        UI->>Route: POST {..., conversationId:fieldConvId}
+    alt User clicks Suggest tips for a section
+        User->>UI: Click section level Suggest button
+        Note over UI: buildSectionPrompt returns intent=section_review with field=null
+        UI->>Route: POST with conversationId=fieldConvId
         Foundry-->>Memory: Section critique markdown
         Memory-->>UI: 200 OK
-        UI->>User: Render critique (no per-field "Use this")
+        UI->>User: Render critique without per field Use this
     end
 
-    alt User uses 💬 Chat tab
-        User->>UI: Type message, press Enter
-        UI->>UI: buildChatPrompt(section, values, userText)<br/>→ {intent:"chat", userMessage:userText, ...}
-        UI->>Route: POST {..., conversationId:chatConvId}
-        Memory->>Foundry: RunAsync(envelope)
-        Foundry-->>Memory: 1–3 paragraphs of plain prose<br/>(no rubric, no Suggested wording)
+    alt User uses the Chat tab
+        User->>UI: Type message and press Enter
+        Note over UI: buildChatPrompt returns intent=chat with userMessage set to userText
+        UI->>Route: POST with conversationId=chatConvId
+        Memory->>Foundry: RunAsync envelope
+        Foundry-->>Memory: One to three paragraphs of plain prose, no rubric and no Suggested wording
         Memory-->>UI: 200 OK
         UI->>User: Append assistant bubble to chat history
     end
 
-    Note over UI,Memory: First response on each thread sets that thread's<br/>conversationId; subsequent calls reuse it so Foundry<br/>memory + thread context are preserved per intent group.
+    Note over UI,Memory: First response on each thread sets that conversationId. Subsequent calls reuse it so Foundry memory and thread context are preserved per intent group.
 ```
