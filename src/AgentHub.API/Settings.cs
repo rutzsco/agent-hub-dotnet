@@ -1,17 +1,19 @@
 using Microsoft.Extensions.Configuration;
-using Npgsql;
 
 namespace AgentHub.API;
 
 public class Settings
 {
     public required Uri AzureAIProjectEndpoint { get; init; }
+    public Uri? AzureOpenAIEndpoint { get; init; }
     public string AzureAIModelDeploymentName { get; init; } = "gpt-4o-mini";
     public string? FoundryAgentName { get; init; }
     public string MemoryStoreName { get; init; } = "agent-hub-memory";
     public string MemoryEmbeddingModel { get; init; } = "text-embedding-3-small";
-    public string? LocalEmbeddingModelPath { get; init; }
-    public required string PostgresConnectionString { get; init; }
+    public string? CosmosAccountEndpoint { get; init; }
+    public string? CosmosDatabaseName { get; init; }
+    public string CosmosConversationContainerName { get; init; } = "conversation-messages";
+    public string CosmosMemoryAuditContainerName { get; init; } = "memory-audit";
 
     public static Settings Load(IConfiguration configuration)
     {
@@ -26,6 +28,15 @@ public class Settings
             ?? configuration["AZURE_AI_MODEL_DEPLOYMENT_NAME"]
             ?? "gpt-4o-mini";
 
+        var azureOpenAIEndpointValue = agentHubSection["AzureOpenAIEndpoint"]
+            ?? configuration["AZURE_OPENAI_ENDPOINT"];
+
+        Uri? azureOpenAIEndpoint = null;
+        if (!string.IsNullOrWhiteSpace(azureOpenAIEndpointValue))
+        {
+            azureOpenAIEndpoint = new Uri(azureOpenAIEndpointValue);
+        }
+
         var foundryAgentName = agentHubSection["FoundryAgentName"]
             ?? configuration["AZURE_AI_FOUNDRY_AGENT_NAME"];
 
@@ -37,63 +48,32 @@ public class Settings
             ?? configuration["AZURE_AI_MEMORY_EMBEDDING_MODEL"]
             ?? "text-embedding-3-small";
 
-        var localEmbeddingModelPath = agentHubSection["LocalEmbeddingModelPath"]
-            ?? configuration["LOCAL_EMBEDDING_MODEL_PATH"];
+        var cosmosAccountEndpoint = agentHubSection.GetSection("Cosmos")["AccountEndpoint"]
+            ?? configuration["COSMOS_ACCOUNT_ENDPOINT"];
 
-        var postgresConnectionString = LoadPostgresConnectionString(configuration);
+        var cosmosDatabaseName = agentHubSection.GetSection("Cosmos")["DatabaseName"]
+            ?? configuration["COSMOS_DATABASE_NAME"];
+
+        var cosmosConversationContainerName = agentHubSection.GetSection("Cosmos")["ConversationContainerName"]
+            ?? configuration["COSMOS_CONVERSATION_CONTAINER_NAME"]
+            ?? "conversation-messages";
+
+        var cosmosMemoryAuditContainerName = agentHubSection.GetSection("Cosmos")["MemoryAuditContainerName"]
+            ?? configuration["COSMOS_MEMORY_AUDIT_CONTAINER_NAME"]
+            ?? "memory-audit";
 
         return new Settings
         {
             AzureAIProjectEndpoint = new Uri(endpoint),
+            AzureOpenAIEndpoint = azureOpenAIEndpoint,
             AzureAIModelDeploymentName = modelDeploymentName,
             FoundryAgentName = foundryAgentName,
             MemoryStoreName = memoryStoreName,
             MemoryEmbeddingModel = memoryEmbeddingModel,
-            LocalEmbeddingModelPath = localEmbeddingModelPath,
-            PostgresConnectionString = postgresConnectionString
+            CosmosAccountEndpoint = cosmosAccountEndpoint,
+            CosmosDatabaseName = cosmosDatabaseName,
+            CosmosConversationContainerName = cosmosConversationContainerName,
+            CosmosMemoryAuditContainerName = cosmosMemoryAuditContainerName
         };
-    }
-
-    private static string LoadPostgresConnectionString(IConfiguration configuration)
-    {
-        var postgresSection = configuration.GetSection("AgentHub:Postgres");
-
-        var explicitConnectionString = postgresSection["ConnectionString"]
-            ?? configuration["POSTGRES_CONNECTION_STRING"]
-            ?? configuration["POSTGRES_URL"];
-
-        if (!string.IsNullOrWhiteSpace(explicitConnectionString))
-        {
-            return explicitConnectionString;
-        }
-
-        var host = postgresSection["Host"] ?? configuration["POSTGRES_HOST"];
-        var database = postgresSection["Database"] ?? configuration["POSTGRES_DATABASE"];
-        var username = postgresSection["Username"] ?? configuration["POSTGRES_USERNAME"];
-        var password = postgresSection["Password"] ?? configuration["POSTGRES_PASSWORD"];
-        var port = postgresSection["Port"] ?? configuration["POSTGRES_PORT"] ?? "5432";
-        var sslMode = postgresSection["SslMode"] ?? configuration["POSTGRES_SSL_MODE"] ?? "Prefer";
-
-        if (string.IsNullOrWhiteSpace(host)
-            || string.IsNullOrWhiteSpace(database)
-            || string.IsNullOrWhiteSpace(username)
-            || string.IsNullOrWhiteSpace(password))
-        {
-            throw new InvalidOperationException(
-                "PostgreSQL connection is not configured. Set AgentHub:Postgres:ConnectionString, POSTGRES_CONNECTION_STRING, or POSTGRES_URL, " +
-                "or provide AgentHub:Postgres:Host/Database/Username/Password (or the matching POSTGRES_* variables).");
-        }
-
-        var builder = new NpgsqlConnectionStringBuilder
-        {
-            Host = host,
-            Port = int.TryParse(port, out var parsedPort) ? parsedPort : 5432,
-            Database = database,
-            Username = username,
-            Password = password,
-            SslMode = Enum.TryParse<SslMode>(sslMode, ignoreCase: true, out var parsedSsl) ? parsedSsl : SslMode.Prefer
-        };
-
-        return builder.ConnectionString;
     }
 }

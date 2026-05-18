@@ -1,8 +1,8 @@
 using System.Collections.Concurrent;
-using AgentHub.Persistence;
+using AgentHub.API.services.conversations;
 using Microsoft.Extensions.Logging;
 
-namespace AgentHub.SessionState;
+namespace AgentHub.API.services.session;
 
 public sealed class ConversationSessionManager : IConversationSessionManager
 {
@@ -79,6 +79,19 @@ public sealed class ConversationSessionManager : IConversationSessionManager
 
         await _historyRepository.AppendMessageAsync(conversationId, "user", userMessage, now, cancellationToken);
         await _historyRepository.AppendMessageAsync(conversationId, "assistant", assistantMessage, now, cancellationToken);
+    }
+
+    public Task SaveServiceManagedConversationAsync(
+        Guid conversationId,
+        string serviceConversationId,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug(
+            "Conversation history is service-managed. ConversationId={ConversationId}, ServiceConversationId={ServiceConversationId}",
+            conversationId,
+            serviceConversationId);
+
+        return Task.CompletedTask;
     }
 
     public Task<IReadOnlyList<ConversationMessage>> GetHistoryAsync(

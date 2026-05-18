@@ -3,13 +3,15 @@ using System.Text.RegularExpressions;
 using Azure.AI.Projects;
 using Azure.AI.Projects.Agents;
 using Azure.Identity;
+using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Foundry;
+using AgentHub.API.services.session;
 
 namespace AgentHub.API.Agents;
 
 public static class FoundryDemoAgent
 {
-    public const string DefaultName = "DemoAgent";
+    public const string DefaultName = "demo-basic-agent";
     private static readonly Regex AgentNamePattern = new("^[A-Za-z0-9._-]{1,64}$", RegexOptions.Compiled);
 
 #pragma warning disable OPENAI001 // FoundryAgent is experimental
@@ -38,6 +40,42 @@ public static class FoundryDemoAgent
 
         logger.LogInformation("Foundry agent is ready. AgentName={AgentName}", record.Name);
         return client.AsAIAgent(record);
+    }
+#pragma warning restore OPENAI001
+
+#pragma warning disable OPENAI001 // FoundryAgent is experimental
+    public static async Task<AgentMessageResult> ProcessMessage(
+        FoundryAgent agent,
+        IConversationSessionManager sessionManager,
+        string message,
+        Guid? conversationId,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            logger.LogWarning("Foundry agent request rejected due to empty message. ConversationId={ConversationId}", conversationId);
+            throw new ArgumentException("Message is required.", nameof(message));
+        }
+
+        var session = await sessionManager.GetOrCreateSessionAsync(
+            conversationId,
+            async token => await agent.CreateConversationSessionAsync(token),
+            cancellationToken);
+
+        var agentSession = (AgentSession)session.Session;
+        var response = await agent.RunAsync(
+            message,
+            agentSession,
+            cancellationToken: cancellationToken);
+
+        var responseText = response.ToString();
+        await sessionManager.SaveServiceManagedConversationAsync(
+            session.ConversationId,
+            ((ChatClientAgentSession)agentSession).ConversationId,
+            cancellationToken);
+
+        return new AgentMessageResult(session.ConversationId, responseText);
     }
 #pragma warning restore OPENAI001
 

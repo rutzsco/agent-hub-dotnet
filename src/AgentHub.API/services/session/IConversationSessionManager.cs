@@ -1,6 +1,6 @@
-using AgentHub.Persistence;
+using AgentHub.API.services.conversations;
 
-namespace AgentHub.SessionState;
+namespace AgentHub.API.services.session;
 
 public interface IConversationSessionManager
 {
@@ -13,6 +13,11 @@ public interface IConversationSessionManager
         Guid conversationId,
         string userMessage,
         string assistantMessage,
+        CancellationToken cancellationToken = default);
+
+    Task SaveServiceManagedConversationAsync(
+        Guid conversationId,
+        string serviceConversationId,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<ConversationMessage>> GetHistoryAsync(

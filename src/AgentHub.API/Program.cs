@@ -1,7 +1,5 @@
 using AgentHub.API;
 using AgentHub.API.Routes;
-using AgentHub.Persistence;
-using AgentHub.SessionState;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,13 +19,7 @@ builder.Logging.AddSimpleConsole(options =>
 
 builder.Services.AddHealthChecks();
 builder.Services.AddOpenApi();
-builder.Services.AddAgents(settings);
-builder.Services.AddSingleton(new PostgresConversationOptions
-{
-    ConnectionString = settings.PostgresConnectionString
-});
-builder.Services.AddSingleton<IConversationHistoryRepository, PostgresConversationHistoryRepository>();
-builder.Services.AddSingleton<IConversationSessionManager, ConversationSessionManager>();
+builder.Services.AddAgentHubServices(settings);
 
 var app = builder.Build();
 
@@ -62,11 +54,12 @@ app.Use(async (context, next) =>
 
 app.MapHealthChecks("/health");
 app.MapOpenApi();
+app.UseDefaultFiles();
+app.UseStaticFiles();
 app.UseSwaggerUI(options =>
 {
     options.SwaggerEndpoint("/openapi/v1.json", "AgentHub API");
 });
-app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
 app.MapAgentRoutes();
 
 app.Run();
