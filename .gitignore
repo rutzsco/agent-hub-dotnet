@@ -417,3 +417,4 @@ FodyWeavers.xsd
 *.msm
 *.msp
 src/AgentHub.API/appsettings.Development.json
+src/kai-agent/.venv
