@@ -52,9 +52,9 @@ public static class AgentHubServiceCollectionExtensions
 
         services.AddSingleton<IMemoryAuditRepository>(serviceProvider =>
         {
-            var postgresOptions = serviceProvider.GetRequiredService<PostgresConversationOptions>();
-            var logger = serviceProvider.GetRequiredService<ILoggerFactory>().CreateLogger<PostgresMemoryAuditRepository>();
-            return new PostgresMemoryAuditRepository(postgresOptions, logger);
+            var cosmosOptions = serviceProvider.GetRequiredService<CosmosOptions>();
+            var logger = serviceProvider.GetRequiredService<ILoggerFactory>().CreateLogger<CosmosMemoryAuditRepository>();
+            return new CosmosMemoryAuditRepository(cosmosOptions, logger);
         });
 
         return services;
@@ -62,13 +62,18 @@ public static class AgentHubServiceCollectionExtensions
 
     private static IServiceCollection AddConversationServices(this IServiceCollection services, Settings settings)
     {
-        if (!string.IsNullOrWhiteSpace(settings.PostgresConnectionString))
+        var cosmosOptions = new CosmosOptions
         {
-            services.AddSingleton(new PostgresConversationOptions
-            {
-                ConnectionString = settings.PostgresConnectionString
-            });
-            services.AddSingleton<IConversationHistoryRepository, PostgresConversationHistoryRepository>();
+            AccountEndpoint = settings.CosmosAccountEndpoint ?? string.Empty,
+            DatabaseName = settings.CosmosDatabaseName ?? "agent-hub",
+            ConversationContainerName = settings.CosmosConversationContainerName,
+            MemoryAuditContainerName = settings.CosmosMemoryAuditContainerName
+        };
+        services.AddSingleton(cosmosOptions);
+
+        if (!string.IsNullOrWhiteSpace(settings.CosmosAccountEndpoint))
+        {
+            services.AddSingleton<IConversationHistoryRepository, CosmosConversationHistoryRepository>();
         }
         else
         {

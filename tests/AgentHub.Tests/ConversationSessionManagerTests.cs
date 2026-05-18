@@ -54,8 +54,8 @@ public class ConversationSessionManagerTests
         var conversationId = Guid.NewGuid();
         var history = new List<ConversationMessage>
         {
-            new(1, conversationId, "user", "hello", DateTimeOffset.UtcNow),
-            new(2, conversationId, "assistant", "hi there", DateTimeOffset.UtcNow),
+            new("1", conversationId, "user", "hello", DateTimeOffset.UtcNow),
+            new("2", conversationId, "assistant", "hi there", DateTimeOffset.UtcNow),
         };
         _repository.GetMessagesAsync(conversationId, Arg.Any<CancellationToken>())
             .Returns(history);
@@ -103,7 +103,7 @@ public class ConversationSessionManagerTests
         var conversationId = Guid.NewGuid();
         var expected = new List<ConversationMessage>
         {
-            new(1, conversationId, "user", "hello", DateTimeOffset.UtcNow)
+            new("1", conversationId, "user", "hello", DateTimeOffset.UtcNow)
         };
         _repository.GetMessagesAsync(conversationId, Arg.Any<CancellationToken>())
             .Returns(expected);

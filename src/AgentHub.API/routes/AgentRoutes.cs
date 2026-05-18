@@ -1,3 +1,4 @@
+using System.ClientModel;
 using System.Text.RegularExpressions;
 using AgentHub.API.Agents;
 using AgentHub.API.services.conversations;
@@ -128,6 +129,20 @@ public static partial class AgentRoutes
             {
                 return Results.BadRequest(ex.Message);
             }
+            catch (ClientResultException ex) when (IsFoundryContentFilterError(ex))
+            {
+                logger.LogWarning(
+                    ex,
+                    "Foundry memory request blocked by content filter. UserId={UserId}, ConversationId={ConversationId}",
+                    request.UserId,
+                    request.ConversationId);
+
+                return Results.BadRequest(new
+                {
+                    error = "The request was blocked by content filtering. Please rephrase your message and retry.",
+                    code = "content_filter"
+                });
+            }
         });
 
         app.MapGet("/users/{userId}/memory", async (
@@ -239,6 +254,18 @@ public static partial class AgentRoutes
         });
 
         return app;
+    }
+
+    private static bool IsFoundryContentFilterError(ClientResultException ex)
+    {
+        if (ex.Status != 400)
+        {
+            return false;
+        }
+
+        var message = ex.Message;
+        return message.Contains("content_filter", StringComparison.OrdinalIgnoreCase)
+               || message.Contains("invalid_request_error", StringComparison.OrdinalIgnoreCase);
     }
 
 }

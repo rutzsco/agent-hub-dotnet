@@ -5,7 +5,7 @@ namespace AgentHub.API.Services.Memory;
 /// Stored in PostgreSQL for compliance and accountability.
 /// </summary>
 public sealed record MemoryDeletionAuditEntry(
-    long Id,
+    string Id,
     string UserId,
     string MemoryStoreName,
     string AuditMessage,

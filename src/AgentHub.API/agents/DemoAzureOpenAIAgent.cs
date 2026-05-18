@@ -12,10 +12,15 @@ public static class DemoAzureOpenAIAgent
 {
     public static AIAgent Create(Settings settings)
     {
-        var endpoint = settings.AzureOpenAIEndpoint ?? settings.AzureAIProjectEndpoint;
+        if (settings.AzureOpenAIEndpoint is null)
+        {
+            throw new InvalidOperationException(
+                "Demo AOAI agent requires a dedicated Azure OpenAI endpoint. Set AgentHub:AzureOpenAIEndpoint or AZURE_OPENAI_ENDPOINT, and ensure your signed-in identity has the 'Cognitive Services OpenAI User' role on that Azure OpenAI resource.");
+        }
+
         var client = string.IsNullOrWhiteSpace(settings.AzureAIApiKey)
-            ? new AzureOpenAIClient(endpoint, new DefaultAzureCredential())
-            : new AzureOpenAIClient(endpoint, new AzureKeyCredential(settings.AzureAIApiKey));
+            ? new AzureOpenAIClient(settings.AzureOpenAIEndpoint, new DefaultAzureCredential())
+            : new AzureOpenAIClient(settings.AzureOpenAIEndpoint, new AzureKeyCredential(settings.AzureAIApiKey));
 
         return client
             .GetChatClient(settings.AzureAIModelDeploymentName)
