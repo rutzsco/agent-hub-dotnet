@@ -55,7 +55,7 @@ public static partial class AgentRoutes
 
 #pragma warning disable OPENAI001 // FoundryAgent is experimental
         app.MapPost("/agents/demo-foundry-basic-agent", async (
-            [FromKeyedServices("foundry-demo")] FoundryAgent agent,
+            IServiceProvider serviceProvider,
             IConversationSessionManager sessionManager,
             AgentRequest request,
             ILoggerFactory loggerFactory,
@@ -69,6 +69,7 @@ public static partial class AgentRoutes
 
             try
             {
+                var agent = serviceProvider.GetRequiredKeyedService<FoundryAgent>("foundry-demo");
                 var result = await FoundryDemoAgent.ProcessMessage(
                     agent,
                     sessionManager,
@@ -88,11 +89,15 @@ public static partial class AgentRoutes
             {
                 return Results.BadRequest(ex.Message);
             }
+            catch (InvalidOperationException ex) when (IsFoundryNotConfigured(ex))
+            {
+                return FoundryNotConfigured(ex);
+            }
         });
 #pragma warning restore OPENAI001
 
         app.MapPost("/agents/foundryMemoryAgent", async (
-            FoundryMemoryContext memoryContext,
+            IServiceProvider serviceProvider,
             MemoryAgentRequest request,
             HttpContext httpContext,
             ILoggerFactory loggerFactory,
@@ -110,6 +115,7 @@ public static partial class AgentRoutes
 
             try
             {
+                var memoryContext = serviceProvider.GetRequiredService<FoundryMemoryContext>();
                 var result = await FoundryMemoryAgent.ProcessMessage(
                     memoryContext,
                     request.Message,
@@ -143,11 +149,15 @@ public static partial class AgentRoutes
                     code = "content_filter"
                 });
             }
+            catch (InvalidOperationException ex) when (IsFoundryNotConfigured(ex))
+            {
+                return FoundryNotConfigured(ex);
+            }
         });
 
         app.MapGet("/users/{userId}/memory", async (
             string userId,
-            MemoryAuditService auditService,
+            IServiceProvider serviceProvider,
             string? topic,
             ILoggerFactory loggerFactory,
             CancellationToken cancellationToken) =>
@@ -160,14 +170,21 @@ public static partial class AgentRoutes
                 return Results.BadRequest("Invalid userId format.");
             }
 
-            var result = await auditService.InspectAsync(userId, topic, cancellationToken);
-            return Results.Ok(result);
+            try
+            {
+                var auditService = serviceProvider.GetRequiredService<MemoryAuditService>();
+                var result = await auditService.InspectAsync(userId, topic, cancellationToken);
+                return Results.Ok(result);
+            }
+            catch (InvalidOperationException ex) when (IsFoundryNotConfigured(ex))
+            {
+                return FoundryNotConfigured(ex);
+            }
         });
 
         app.MapDelete("/users/{userId}/memory", async (
             string userId,
-            MemoryAuditService auditService,
-            IMemoryAuditRepository auditRepository,
+            IServiceProvider serviceProvider,
             ILoggerFactory loggerFactory,
             CancellationToken cancellationToken) =>
         {
@@ -179,8 +196,11 @@ public static partial class AgentRoutes
                 return Results.BadRequest("Invalid userId format.");
             }
 
+            IMemoryAuditRepository? auditRepository = null;
             try
             {
+                var auditService = serviceProvider.GetRequiredService<MemoryAuditService>();
+                auditRepository = serviceProvider.GetRequiredService<IMemoryAuditRepository>();
                 var result = await auditService.DeleteAsync(userId, cancellationToken);
                 
                 // Check if deletion was actually successful
@@ -217,18 +237,25 @@ public static partial class AgentRoutes
 
                 return Results.Ok(result);
             }
+            catch (InvalidOperationException ex) when (IsFoundryNotConfigured(ex))
+            {
+                return FoundryNotConfigured(ex);
+            }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Memory deletion failed with exception. UserId={UserId}", userId);
-                
-                var errorAuditMessage = $"Memory deletion error: {ex.GetType().Name}";
-                await auditRepository.LogMemoryDeletionAsync(
-                    userId,
-                    "foundry-memory",
-                    errorAuditMessage,
-                    wasSuccessful: false,
-                    errorMessage: ex.Message,
-                    cancellationToken);
+
+                if (auditRepository is not null)
+                {
+                    var errorAuditMessage = $"Memory deletion error: {ex.GetType().Name}";
+                    await auditRepository.LogMemoryDeletionAsync(
+                        userId,
+                        "foundry-memory",
+                        errorAuditMessage,
+                        wasSuccessful: false,
+                        errorMessage: ex.Message,
+                        cancellationToken);
+                }
 
                 throw;
             }
@@ -266,6 +293,19 @@ public static partial class AgentRoutes
         var message = ex.Message;
         return message.Contains("content_filter", StringComparison.OrdinalIgnoreCase)
                || message.Contains("invalid_request_error", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsFoundryNotConfigured(InvalidOperationException ex)
+    {
+        return ex.Message.StartsWith("Foundry agents are not configured.", StringComparison.Ordinal);
+    }
+
+    private static IResult FoundryNotConfigured(InvalidOperationException ex)
+    {
+        return Results.Problem(
+            title: "Foundry support is not configured",
+            detail: ex.Message,
+            statusCode: StatusCodes.Status503ServiceUnavailable);
     }
 
 }

@@ -14,6 +14,7 @@ public class SettingsTests
             ["AgentHub:AzureOpenAIEndpoint"] = "https://test-openai.openai.azure.com/",
             ["AgentHub:AzureAIModelDeploymentName"] = "gpt-4o",
             ["AgentHub:AzureAIApiKey"] = "section-key",
+            ["AgentHub:ApimSubscriptionKey"] = "section-apim-key",
             ["AgentHub:FoundryAgentName"] = "test-agent",
             ["AgentHub:MemoryStoreName"] = "test-memory",
             ["AgentHub:MemoryEmbeddingModel"] = "text-embedding-ada-002",
@@ -29,6 +30,7 @@ public class SettingsTests
         Assert.Equal(new Uri("https://test-openai.openai.azure.com/"), settings.AzureOpenAIEndpoint);
         Assert.Equal("gpt-4o", settings.AzureAIModelDeploymentName);
         Assert.Equal("section-key", settings.AzureAIApiKey);
+        Assert.Equal("section-apim-key", settings.ApimSubscriptionKey);
         Assert.Equal("test-agent", settings.FoundryAgentName);
         Assert.Equal("test-memory", settings.MemoryStoreName);
         Assert.Equal("text-embedding-ada-002", settings.MemoryEmbeddingModel);
@@ -51,6 +53,7 @@ public class SettingsTests
         Assert.Null(settings.AzureOpenAIEndpoint);
         Assert.Equal("gpt-4o-mini", settings.AzureAIModelDeploymentName);
         Assert.Null(settings.AzureAIApiKey);
+        Assert.Null(settings.ApimSubscriptionKey);
         Assert.Null(settings.FoundryAgentName);
         Assert.Equal("agent-hub-memory", settings.MemoryStoreName);
         Assert.Equal("text-embedding-3-small", settings.MemoryEmbeddingModel);
@@ -58,6 +61,72 @@ public class SettingsTests
         Assert.Null(settings.CosmosDatabaseName);
         Assert.Equal("conversation-messages", settings.CosmosConversationContainerName);
         Assert.Equal("memory-audit", settings.CosmosMemoryAuditContainerName);
+    }
+
+    [Fact]
+    public void Load_BlankSectionValues_FallBackToEnvironmentVariablesAndDefaults()
+    {
+        var config = BuildConfig(new Dictionary<string, string?>
+        {
+            ["AgentHub:AzureAIProjectEndpoint"] = "",
+            ["AZURE_AI_PROJECT_ENDPOINT"] = "https://env.services.ai.azure.com/api/projects/proj1",
+            ["AgentHub:AzureOpenAIEndpoint"] = "",
+            ["AZURE_OPENAI_ENDPOINT"] = "https://env-openai.openai.azure.com/",
+            ["AgentHub:AzureAIModelDeploymentName"] = "",
+            ["AZURE_AI_MODEL_DEPLOYMENT_NAME"] = "gpt-4o-env",
+            ["AgentHub:FoundryAgentName"] = "",
+            ["AZURE_AI_FOUNDRY_AGENT_NAME"] = "env-agent",
+            ["AgentHub:MemoryStoreName"] = "",
+            ["AgentHub:MemoryEmbeddingModel"] = "",
+            ["AgentHub:Cosmos:AccountEndpoint"] = "",
+            ["COSMOS_ACCOUNT_ENDPOINT"] = "https://env.documents.azure.com:443/"
+        });
+
+        var settings = Settings.Load(config);
+
+        Assert.Equal(new Uri("https://env.services.ai.azure.com/api/projects/proj1"), settings.AzureAIProjectEndpoint);
+        Assert.Equal(new Uri("https://env-openai.openai.azure.com/"), settings.AzureOpenAIEndpoint);
+        Assert.Equal("gpt-4o-env", settings.AzureAIModelDeploymentName);
+        Assert.Equal("env-agent", settings.FoundryAgentName);
+        Assert.Equal("agent-hub-memory", settings.MemoryStoreName);
+        Assert.Equal("text-embedding-3-small", settings.MemoryEmbeddingModel);
+        Assert.Equal("https://env.documents.azure.com:443/", settings.CosmosAccountEndpoint);
+    }
+
+    [Fact]
+    public void Load_AllowsMissingFoundryEndpoint()
+    {
+        var settings = Settings.Load(BuildConfig(new Dictionary<string, string?>()));
+
+        Assert.Null(settings.AzureAIProjectEndpoint);
+        Assert.Throws<InvalidOperationException>(settings.RequireAzureAIProjectEndpoint);
+    }
+
+    [Fact]
+    public void RequireAzureOpenAIEndpoint_UsesAzureOpenAIEndpointFirst()
+    {
+        var config = BuildConfig(new Dictionary<string, string?>
+        {
+            ["AgentHub:AzureOpenAIEndpoint"] = "https://test-openai.openai.azure.com/",
+            ["AgentHub:AzureAIProjectEndpoint"] = "https://test.services.ai.azure.com/api/projects/proj1"
+        });
+
+        var settings = Settings.Load(config);
+
+        Assert.Equal(new Uri("https://test-openai.openai.azure.com/"), settings.RequireAzureOpenAIEndpoint());
+    }
+
+    [Fact]
+    public void RequireAzureOpenAIEndpoint_FallsBackToAzureAIProjectEndpoint()
+    {
+        var config = BuildConfig(new Dictionary<string, string?>
+        {
+            ["AgentHub:AzureAIProjectEndpoint"] = "https://test.services.ai.azure.com/api/projects/proj1"
+        });
+
+        var settings = Settings.Load(config);
+
+        Assert.Equal(new Uri("https://test.services.ai.azure.com/api/projects/proj1"), settings.RequireAzureOpenAIEndpoint());
     }
 
     [Fact]
@@ -69,6 +138,7 @@ public class SettingsTests
             ["AZURE_OPENAI_ENDPOINT"] = "https://env-openai.openai.azure.com/",
             ["AZURE_AI_MODEL_DEPLOYMENT_NAME"] = "gpt-4o-env",
             ["AZURE_AI_API_KEY"] = "env-key",
+            ["APIM_SUBSCRIPTION_KEY"] = "env-apim-key",
             ["AZURE_AI_FOUNDRY_AGENT_NAME"] = "env-agent",
             ["AZURE_AI_MEMORY_STORE_NAME"] = "env-memory",
             ["AZURE_AI_MEMORY_EMBEDDING_MODEL"] = "env-embed",
@@ -84,6 +154,7 @@ public class SettingsTests
         Assert.Equal(new Uri("https://env-openai.openai.azure.com/"), settings.AzureOpenAIEndpoint);
         Assert.Equal("gpt-4o-env", settings.AzureAIModelDeploymentName);
         Assert.Equal("env-key", settings.AzureAIApiKey);
+        Assert.Equal("env-apim-key", settings.ApimSubscriptionKey);
         Assert.Equal("env-agent", settings.FoundryAgentName);
         Assert.Equal("env-memory", settings.MemoryStoreName);
         Assert.Equal("env-embed", settings.MemoryEmbeddingModel);
@@ -91,17 +162,6 @@ public class SettingsTests
         Assert.Equal("env-db", settings.CosmosDatabaseName);
         Assert.Equal("env-conversations", settings.CosmosConversationContainerName);
         Assert.Equal("env-audit", settings.CosmosMemoryAuditContainerName);
-    }
-
-    [Fact]
-    public void Load_ThrowsWhenEndpointMissing()
-    {
-        var config = BuildConfig(new Dictionary<string, string?>
-        {
-            ["AgentHub:Cosmos:DatabaseName"] = "agent-hub-db"
-        });
-
-        Assert.Throws<InvalidOperationException>(() => Settings.Load(config));
     }
 
     [Fact]
@@ -132,7 +192,9 @@ public class SettingsTests
             ["AgentHub:Cosmos:AccountEndpoint"] = "https://section.documents.azure.com:443/",
             ["COSMOS_ACCOUNT_ENDPOINT"] = "https://env.documents.azure.com:443/",
             ["AgentHub:Cosmos:DatabaseName"] = "section-db",
-            ["COSMOS_DATABASE_NAME"] = "env-db"
+            ["COSMOS_DATABASE_NAME"] = "env-db",
+            ["AgentHub:ApimSubscriptionKey"] = "section-apim-key",
+            ["APIM_SUBSCRIPTION_KEY"] = "env-apim-key"
         });
 
         var settings = Settings.Load(config);
@@ -142,6 +204,7 @@ public class SettingsTests
         Assert.Equal("section-key", settings.AzureAIApiKey);
         Assert.Equal("https://section.documents.azure.com:443/", settings.CosmosAccountEndpoint);
         Assert.Equal("section-db", settings.CosmosDatabaseName);
+        Assert.Equal("section-apim-key", settings.ApimSubscriptionKey);
     }
 
     private static IConfiguration BuildConfig(Dictionary<string, string?> values)

@@ -18,6 +18,76 @@ The API exposes three agent routes with two memory models.
 - `POST /agents/foundryMemoryAgent` accepts `message`, `userId`, and optional `conversationId`
 - This route uses a Foundry memory store and relies on Foundry-managed memory behaviors
 
+## Basic Getting Started
+
+Use these steps to run the API locally with the same style of settings used in this workspace.
+
+### 1. Prerequisites
+
+- [.NET 10 SDK](https://dotnet.microsoft.com/download)
+- Access to the Azure OpenAI or Azure AI Foundry deployment you want the agents to use
+- For Azure identity-based Foundry calls, sign in locally with `az login`
+- Optional: a PostgreSQL database if you want persisted conversation history for `demo` and `foundry-demo`
+
+### 2. Configure Local Settings
+
+Local development settings live in `src/AgentHub.API/appsettings.Development.json` under the `AgentHub` section.
+
+This example mirrors the current workspace settings, with the subscription key replaced by a placeholder:
+
+```json
+{
+  "AgentHub": {
+    "ApimSubscriptionKey": "<your-apim-subscription-key>",
+    "AzureOpenAIEndpoint": "https://dev.aiapim.jci.com",
+    "AzureAIModelDeploymentName": "gpt-5.1-2025-11-13"
+  }
+}
+```
+
+For Foundry-managed routes such as `/agents/foundry-demo` and `/agents/foundryMemoryAgent`, also set `AzureAIProjectEndpoint`:
+
+```json
+{
+  "AgentHub": {
+    "AzureAIProjectEndpoint": "https://<resource>.services.ai.azure.com/api/projects/<project>",
+    "AzureOpenAIEndpoint": "https://dev.aiapim.jci.com",
+    "AzureAIModelDeploymentName": "gpt-5.1-2025-11-13",
+    "ApimSubscriptionKey": "<your-apim-subscription-key>",
+    "FoundryAgentName": "DemoAgent"
+  }
+}
+```
+
+To enable PostgreSQL-backed conversation history, add either a full connection string or the individual PostgreSQL values shown later in this README.
+
+### 3. Restore and Build
+
+From the repository root:
+
+```powershell
+dotnet restore AgentHub.slnx
+dotnet build AgentHub.slnx
+```
+
+### 4. Run the API
+
+```powershell
+dotnet run --project src/AgentHub.API/AgentHub.API.csproj --launch-profile http
+```
+
+Open Swagger at:
+
+- `http://localhost:5023/swagger`
+
+### 5. Try a Request
+
+```powershell
+curl -X POST http://localhost:5023/agents/demo `
+  -H "Content-Type: application/json" `
+  -d '{"message":"Hello, introduce yourself."}'
+```
+
 ## Agents
 
 | Agent | Endpoint | Type | Description |
@@ -195,9 +265,11 @@ The application uses the `AgentHub` configuration section.
 
 | Setting | Required | Description |
 |--------|----------|-------------|
-| `AgentHub:AzureAIProjectEndpoint` | Yes | Azure AI Foundry project endpoint |
-| `AgentHub:AzureOpenAIEndpoint` | Yes (for `demo-aoai-agent`) | Azure OpenAI resource endpoint used by `AzureOpenAIClient` (for example `https://<resource>.openai.azure.com/`) |
+| `AgentHub:AzureAIProjectEndpoint` | For Foundry routes | Azure AI Foundry project endpoint. If omitted, Foundry-backed endpoints return a configuration error when invoked. |
+| `AgentHub:AzureOpenAIEndpoint` | For APIM/OpenAI routes | Azure OpenAI or APIM endpoint used for Azure OpenAI calls. If omitted, the app falls back to `AzureAIProjectEndpoint` when available. |
 | `AgentHub:AzureAIModelDeploymentName` | Yes | Model deployment name in the Foundry project |
+| `AgentHub:AzureAIApiKey` | No | Azure OpenAI API key when using key-based authentication; also supported by `AZURE_AI_API_KEY` and `AZURE_OPENAI_API_KEY` |
+| `AgentHub:ApimSubscriptionKey` | No | APIM subscription key for Azure OpenAI calls through APIM; also supported by `APIM_SUBSCRIPTION_KEY` |
 | `AgentHub:FoundryAgentName` | No | Name of the Foundry-managed agent; defaults to `DemoAgent` when omitted |
 | `AgentHub:MemoryStoreName` | No | Foundry memory store name for `foundryMemoryAgent`; defaults to `agent-hub-memory` |
 | `AgentHub:MemoryEmbeddingModel` | No | Embedding deployment/model for Foundry memory store; defaults to `text-embedding-3-small` |
@@ -228,6 +300,9 @@ Environment variable fallbacks are also supported:
 - `AZURE_AI_PROJECT_ENDPOINT`
 - `AZURE_OPENAI_ENDPOINT`
 - `AZURE_AI_MODEL_DEPLOYMENT_NAME`
+- `AZURE_AI_API_KEY`
+- `AZURE_OPENAI_API_KEY`
+- `APIM_SUBSCRIPTION_KEY`
 - `AZURE_AI_FOUNDRY_AGENT_NAME`
 - `AZURE_AI_MEMORY_STORE_NAME`
 - `AZURE_AI_MEMORY_EMBEDDING_MODEL`
@@ -242,22 +317,28 @@ Environment variable fallbacks are also supported:
 
 ## Example Configuration
 
-Use placeholder values similar to the following in `src/AgentHub.API/appsettings.Development.json`.
+Use placeholder values similar to the following in `src/AgentHub.API/appsettings.Development.json`. This mirrors the current local APIM-backed settings, with secrets replaced by placeholders.
 
 ```json
 {
-  "Logging": {
-    "LogLevel": {
-      "Default": "Information",
-      "Microsoft": "Warning",
-      "AgentHub": "Debug"
-    }
-  },
+  "AgentHub": {
+    "ApimSubscriptionKey": "<apim-subscription-key>",
+    "AzureOpenAIEndpoint": "https://dev.aiapim.jci.com",
+    "AzureAIModelDeploymentName": "gpt-5.1-2025-11-13"
+  }
+}
+```
+
+For Foundry-managed agents and PostgreSQL persistence, expand the same section as needed:
+
+```json
+{
   "AgentHub": {
     "AzureAIProjectEndpoint": "https://<resource>.services.ai.azure.com/api/projects/<project>",
-    "AzureOpenAIEndpoint": "https://<resource>.openai.azure.com/",
-    "AzureAIModelDeploymentName": "gpt-4o-mini",
-    "FoundryAgentName": "foundry-demo-agent",
+  "AzureOpenAIEndpoint": "https://dev.aiapim.jci.com",
+  "AzureAIModelDeploymentName": "gpt-5.1-2025-11-13",
+  "ApimSubscriptionKey": "<apim-subscription-key>",
+  "FoundryAgentName": "DemoAgent",
     "MemoryStoreName": "agent-hub-memory",
     "MemoryEmbeddingModel": "text-embedding-3-small",
     "Postgres": {
