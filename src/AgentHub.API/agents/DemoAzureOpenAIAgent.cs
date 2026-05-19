@@ -1,28 +1,54 @@
+using Azure;
 using Azure.AI.OpenAI;
 using Azure.Identity;
 using AgentHub.API.services.conversations;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using AgentHub.API.services.session;
+using System.ClientModel.Primitives;
 
 namespace AgentHub.API.Agents;
 
 public static class DemoAzureOpenAIAgent
 {
+    private const string ApimSubscriptionKeyHeaderName = "Ocp-Apim-Subscription-Key";
+
     public static AIAgent Create(Settings settings)
     {
-        if (settings.AzureOpenAIEndpoint is null)
-        {
-            throw new InvalidOperationException(
-                "Demo AOAI agent requires a dedicated Azure OpenAI endpoint. Set AgentHub:AzureOpenAIEndpoint or AZURE_OPENAI_ENDPOINT, and ensure your signed-in identity has the 'Cognitive Services OpenAI User' role on that Azure OpenAI resource.");
-        }
+        var endpoint = settings.RequireAzureOpenAIEndpoint();
+        var client = CreateAzureOpenAIClient(settings, endpoint);
 
-        return new AzureOpenAIClient(settings.AzureOpenAIEndpoint, settings.CreateAzureCredential())
+        return client
             .GetChatClient(settings.AzureAIModelDeploymentName)
             .AsIChatClient()
             .AsAIAgent(
                 instructions: "You are a friendly assistant. Keep your answers brief.",
                 name: "demo-basic-aoai-agent");
+    }
+
+    private static AzureOpenAIClient CreateAzureOpenAIClient(Settings settings, Uri endpoint)
+    {
+        var apimSubscriptionKey = settings.ApimSubscriptionKey;
+        var keyToUse = string.IsNullOrWhiteSpace(settings.AzureAIApiKey)
+            ? apimSubscriptionKey
+            : settings.AzureAIApiKey;
+
+        if (string.IsNullOrWhiteSpace(keyToUse))
+        {
+            return new AzureOpenAIClient(endpoint, new DefaultAzureCredential());
+        }
+
+        if (string.IsNullOrWhiteSpace(apimSubscriptionKey))
+        {
+            return new AzureOpenAIClient(endpoint, new AzureKeyCredential(keyToUse));
+        }
+
+        var options = new AzureOpenAIClientOptions();
+        options.AddPolicy(
+            new ApimSubscriptionKeyPolicy(apimSubscriptionKey),
+            PipelinePosition.PerCall);
+
+        return new AzureOpenAIClient(endpoint, new AzureKeyCredential(keyToUse), options);
     }
 
     public static async Task<AgentMessageResult> ProcessMessage(
@@ -104,6 +130,24 @@ public static class DemoAzureOpenAIAgent
         };
 
         return new ChatMessage(role, message.Content);
+    }
+
+    private sealed class ApimSubscriptionKeyPolicy(string subscriptionKey) : PipelinePolicy
+    {
+        public override void Process(PipelineMessage message, IReadOnlyList<PipelinePolicy> pipeline, int currentIndex)
+        {
+            message.Request.Headers.Set(ApimSubscriptionKeyHeaderName, subscriptionKey);
+            ProcessNext(message, pipeline, currentIndex);
+        }
+
+        public override async ValueTask ProcessAsync(
+            PipelineMessage message,
+            IReadOnlyList<PipelinePolicy> pipeline,
+            int currentIndex)
+        {
+            message.Request.Headers.Set(ApimSubscriptionKeyHeaderName, subscriptionKey);
+            await ProcessNextAsync(message, pipeline, currentIndex);
+        }
     }
 }
 
