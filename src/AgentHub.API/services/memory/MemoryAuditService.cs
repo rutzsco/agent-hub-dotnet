@@ -14,6 +14,7 @@ public sealed class MemoryAuditService
     private readonly Func<string, CancellationToken, Task<MemoryStoreDeleteScopeResponse>> _deleteScope;
     private readonly ILogger _logger;
 
+    /// <summary>Production constructor: derives search/delete delegates from the live Foundry context.</summary>
     public MemoryAuditService(FoundryMemoryContext context, ILogger logger)
         : this(
             (scope, query, ct) => FoundryMemoryAgent.SearchMemoriesAsync(
@@ -23,6 +24,7 @@ public sealed class MemoryAuditService
     {
     }
 
+    /// <summary>Test seam: inject custom search/delete delegates to avoid spinning up the Foundry client.</summary>
     internal MemoryAuditService(
         Func<string, string, CancellationToken, Task<MemoryStoreSearchResponse>> searchMemories,
         Func<string, CancellationToken, Task<MemoryStoreDeleteScopeResponse>> deleteScope,

@@ -1,0 +1,1370 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Event Charter — KAI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    :root {
+      --bg: #f3f5f9;
+      --surface: #ffffff;
+      --surface-alt: #f7f8fc;
+      --border: #e3e6ee;
+      --ink: #1b2333;
+      --ink-soft: #5a6478;
+      --muted: #8a93a6;
+      --brand: #2755f4;
+      --brand-dark: #1f47cf;
+      --assistant-from: #4f4bd9;
+      --assistant-to: #6a5af9;
+      --success: #1f9d6a;
+      --warn-bg: #fff4d6;
+      --warn-border: #f1c349;
+      --orange: #f47b20;
+      --pink: #e85b8a;
+      --radius: 10px;
+      --shadow: 0 14px 40px rgba(20, 30, 60, 0.08);
+    }
+    * { box-sizing: border-box; }
+    html, body, #root { height: 100%; }
+    body {
+      margin: 0;
+      font-family: "Inter", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      font-size: 14px;
+    }
+    button { font-family: inherit; cursor: pointer; }
+    .app-shell { display: flex; height: 100vh; }
+
+    /* Sections sidebar */
+    .sections {
+      width: 220px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 18px 14px;
+      overflow-y: auto;
+    }
+    .sections h4 {
+      margin: 0 0 12px 6px;
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+    .section-item {
+      display: flex;
+      gap: 10px;
+      padding: 10px 10px;
+      border-radius: 8px;
+      color: var(--ink-soft);
+      margin-bottom: 4px;
+      cursor: pointer;
+      border: 1px solid transparent;
+    }
+    .section-item:hover { background: var(--surface-alt); }
+    .section-item.active {
+      background: #eef2ff;
+      color: var(--brand);
+      border-color: #d8e0ff;
+    }
+    .section-item .icon { width: 18px; text-align: center; }
+    .section-item .body { display: flex; flex-direction: column; }
+    .section-item .title { font-weight: 600; font-size: 13px; }
+    .section-item .step { font-size: 11px; color: var(--muted); }
+    .section-item.active .step { color: var(--brand); opacity: 0.8; }
+    .sub-items { padding: 4px 0 8px 36px; }
+    .sub-items div {
+      padding: 4px 0;
+      font-size: 13px;
+      color: var(--ink-soft);
+      cursor: pointer;
+    }
+    .sub-items div.active { color: var(--brand); font-weight: 600; }
+
+    /* Main column */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 22px;
+      border-bottom: 1px solid var(--border);
+    }
+    .topbar .logo {
+      width: 28px; height: 28px; border-radius: 6px;
+      background: var(--brand); color: #fff;
+      display: grid; place-items: center; font-weight: 700;
+    }
+    .topbar .title { font-weight: 700; }
+    .topbar .sep { color: var(--muted); }
+    .topbar .crumb { color: var(--muted); }
+    .topbar .spacer { flex: 1; }
+    .btn {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--ink);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-weight: 500;
+    }
+    .btn:hover { background: var(--surface-alt); }
+    .btn-primary {
+      background: var(--brand);
+      color: #fff;
+      border-color: var(--brand);
+    }
+    .btn-primary:hover { background: var(--brand-dark); }
+    .btn-icon { display: inline-flex; gap: 6px; align-items: center; }
+    .icon-close {
+      width: 28px; height: 28px; border-radius: 6px;
+      display: grid; place-items: center; color: var(--muted);
+      background: transparent; border: 1px solid transparent;
+    }
+    .icon-close:hover { background: var(--surface-alt); }
+
+    .content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 22px 28px 16px;
+    }
+    .content-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 18px;
+    }
+    .content-header h2 { margin: 0; font-size: 18px; }
+    .content-header .step-count { color: var(--muted); font-size: 13px; }
+
+    .ai-review {
+      background: linear-gradient(180deg, #2a52e8, #2348cf);
+      color: #fff;
+      border-radius: 10px;
+      padding: 16px 18px;
+      margin-bottom: 22px;
+      box-shadow: var(--shadow);
+    }
+    .ai-review-head {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 10px;
+    }
+    .ai-review-head h3 { margin: 0; font-size: 15px; }
+    .ai-review .lede { opacity: 0.92; margin-bottom: 14px; font-size: 13px; }
+    .ai-review .lede strong { background: rgba(255,255,255,0.18); padding: 1px 5px; border-radius: 4px; }
+    .tag-card {
+      background: #fff;
+      color: var(--ink);
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .tag-card .tag {
+      display: inline-block;
+      font-weight: 700;
+      padding: 2px 10px;
+      border-radius: 14px;
+      color: #fff;
+      font-size: 11px;
+      margin-bottom: 6px;
+    }
+    .tag.t { background: var(--brand); }
+    .tag.a { background: var(--orange); }
+    .tag.g { background: var(--pink); }
+    .tag.s { background: var(--success); }
+
+    .field-block { margin-bottom: 18px; }
+    .field-block label {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 11px; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .field-block .review-pill {
+      display: inline-flex; gap: 5px; align-items: center;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 3px 10px;
+      color: var(--ink-soft);
+      font-size: 11px; letter-spacing: 0;
+      text-transform: none;
+      cursor: pointer;
+    }
+    .field-block .review-pill-active {
+      background: #fff4d6;
+      border-color: #f1c349;
+      color: #6b4f00;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .field-block .review-pill-active:hover { background: #ffe9b0; }
+    .field-block .review-pill-active[disabled] {
+      background: var(--muted); color: #fff; border-color: var(--muted); cursor: wait;
+    }
+    .field-block .ask-pill {
+      display: inline-flex; gap: 5px; align-items: center;
+      background: var(--brand);
+      color: #fff;
+      border: 1px solid var(--brand);
+      border-radius: 14px;
+      padding: 3px 10px;
+      font-size: 11px; letter-spacing: 0;
+      text-transform: none;
+      cursor: pointer;
+      margin-left: 6px;
+    }
+    .field-block .ask-pill:hover { background: var(--brand-dark); }
+    .field-block .ask-pill[disabled] {
+      background: var(--muted); border-color: var(--muted); cursor: wait;
+    }
+    .field-block .label-actions { display: inline-flex; align-items: center; }
+    .field-block textarea, .field-block input {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      font-family: inherit;
+      font-size: 14px;
+      color: var(--ink);
+      background: var(--surface);
+      outline: none;
+    }
+    .field-block textarea:focus, .field-block input:focus {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 3px rgba(39, 85, 244, 0.12);
+    }
+    .field-block textarea { min-height: 90px; resize: vertical; }
+    .field-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .footer-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 28px;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .footer-bar .nav { color: var(--ink-soft); background: transparent; border: 0; font-weight: 500; }
+    .dots { display: flex; gap: 6px; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: #cdd3e0; }
+    .dot.active { background: var(--brand); width: 22px; border-radius: 4px; }
+    .actions { display: flex; gap: 8px; }
+
+    /* AI assistant panel */
+    .assistant {
+      width: 340px;
+      background: linear-gradient(180deg, var(--assistant-from), var(--assistant-to));
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+    }
+    .assistant-header {
+      padding: 16px 18px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .assistant-header .avatar {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: rgba(255,255,255,0.18);
+      display: grid; place-items: center; font-size: 16px;
+    }
+    .assistant-header .title { font-weight: 600; }
+    .assistant-header .subtitle { font-size: 11px; opacity: 0.8; }
+    .assistant-header .close {
+      margin-left: auto;
+      width: 24px; height: 24px; border-radius: 6px;
+      background: rgba(255,255,255,0.12);
+      display: grid; place-items: center; cursor: pointer;
+    }
+    .progress {
+      padding: 0 18px 14px;
+    }
+    .progress-head {
+      display: flex; justify-content: space-between;
+      font-size: 11px; letter-spacing: 0.08em;
+      text-transform: uppercase; opacity: 0.85;
+      margin-bottom: 6px;
+    }
+    .progress-bar {
+      height: 4px; border-radius: 4px;
+      background: rgba(255,255,255,0.22);
+      overflow: hidden;
+    }
+    .progress-bar > div {
+      height: 100%; background: #fff; width: 5%;
+    }
+    .chips {
+      display: flex; flex-wrap: wrap; gap: 6px;
+      padding: 12px 18px;
+    }
+    .chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px 10px;
+      font-size: 11px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.14);
+    }
+    .chip.done { background: rgba(255,255,255,0.28); }
+    .chip .dotmark { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.5); }
+    .chip.done .dotmark { background: #b6f7c2; }
+    .progress-note {
+      font-size: 12px; padding: 0 18px 14px; opacity: 0.9;
+    }
+
+    .assistant-card {
+      background: var(--surface);
+      color: var(--ink);
+      margin: 0 12px;
+      border-radius: 12px 12px 0 0;
+      flex: 1;
+      display: flex; flex-direction: column;
+      box-shadow: 0 -6px 16px rgba(0,0,0,0.08);
+    }
+    .tips-for {
+      padding: 14px 16px 6px;
+      display: flex; gap: 8px; align-items: center;
+      font-weight: 600;
+    }
+    .tips-for::before {
+      content: ""; width: 6px; height: 6px; border-radius: 50%;
+      background: var(--brand); display: inline-block;
+    }
+    .tabs {
+      display: flex; gap: 18px;
+      padding: 4px 16px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .tab {
+      padding: 8px 2px;
+      font-size: 13px;
+      color: var(--ink-soft);
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+    }
+    .tab.active { color: var(--brand); border-color: var(--brand); font-weight: 600; }
+    .all-fields {
+      padding: 10px 16px 4px;
+      font-size: 12px;
+      color: var(--ink-soft);
+      cursor: pointer;
+    }
+    .field-info {
+      margin: 6px 16px 12px;
+      background: #eef2ff;
+      border: 1px solid #d8e0ff;
+      padding: 12px;
+      border-radius: 8px;
+    }
+    .field-info h5 { margin: 0 0 6px; font-size: 12px; letter-spacing: 0.08em; color: var(--brand); }
+    .field-info p { margin: 0; font-size: 13px; line-height: 1.45; color: var(--ink-soft); }
+
+    .sub-tabs {
+      display: flex; gap: 14px;
+      padding: 8px 16px 4px;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+    .sub-tab { color: var(--ink-soft); padding: 6px 2px; cursor: pointer; border-bottom: 2px solid transparent; }
+    .sub-tab.active { color: var(--ink); border-color: var(--ink); font-weight: 600; }
+
+    .tips-list {
+      padding: 10px 16px 18px;
+      flex: 1;
+      overflow-y: auto;
+      font-size: 13px;
+    }
+    .tips-list ol { padding-left: 18px; margin: 0; color: var(--ink-soft); }
+    .tips-list li { margin-bottom: 8px; line-height: 1.4; }
+
+    .ai-response {
+      background: #f7f9ff;
+      border: 1px solid #d8e0ff;
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 13px;
+      color: var(--ink);
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+    .ai-response .ai-source {
+      display: block;
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .ai-empty { color: var(--muted); font-size: 13px; }
+    .ai-error {
+      background: #fff2f1;
+      border: 1px solid #f5c2bd;
+      color: #b23a2f;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 13px;
+    }
+
+    .chat-pane {
+      display: flex; flex-direction: column;
+      flex: 1; min-height: 0;
+    }
+    .chat-history {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 16px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .chat-bubble {
+      max-width: 85%;
+      padding: 8px 12px;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+    .chat-bubble.user {
+      align-self: flex-end;
+      background: var(--brand);
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+    .chat-bubble.assistant {
+      align-self: flex-start;
+      background: var(--surface-alt);
+      color: var(--ink);
+      border: 1px solid var(--border);
+      border-bottom-left-radius: 4px;
+    }
+    .chat-bubble.assistant.loading { font-style: italic; color: var(--muted); }
+    .chat-input-row {
+      display: flex; gap: 6px;
+      padding: 10px 16px 14px;
+      border-top: 1px solid var(--border);
+    }
+    .chat-input-row input {
+      flex: 1;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 13px;
+    }
+    .chat-input-row button {
+      background: var(--brand); color: #fff; border: 0;
+      padding: 8px 14px; border-radius: 6px; font-weight: 600;
+      cursor: pointer;
+    }
+    .chat-input-row button[disabled] { background: var(--muted); cursor: not-allowed; }
+    .suggestion-list {
+      display: flex; flex-direction: column; gap: 8px;
+      margin-top: 10px;
+    }
+    .suggestion-item {
+      display: flex; gap: 8px; align-items: flex-start;
+      background: #fff;
+      border: 1px solid #d8e0ff;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .suggestion-item.primary {
+      background: #eef2ff;
+      border-color: var(--brand);
+    }
+    .suggestion-item .text { flex: 1; white-space: pre-wrap; color: var(--ink); }
+    .suggestion-item .kind {
+      display: block;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .suggestion-item button {
+      flex-shrink: 0;
+      background: var(--brand);
+      color: #fff;
+      border: 0;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .suggestion-item button:hover { background: var(--brand-dark); }
+    .suggestion-item button[disabled] {
+      background: var(--muted); cursor: not-allowed;
+    }
+    .user-id-row {
+      display: flex; gap: 8px; align-items: center;
+      padding: 10px 16px 0;
+      font-size: 12px;
+    }
+    .user-id-row input {
+      flex: 1;
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 12px;
+    }
+
+    @media (max-width: 1100px) {
+      .assistant { width: 320px; }
+      .sections { width: 200px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useMemo } = React;
+
+    // Each section owns its own fields. Each section is weighted equally (1/6).
+    // Field "kind" controls input rendering: 'textarea' | 'text'.
+    const SECTIONS = [
+      {
+        id: 'summary',
+        icon: '📄',
+        title: 'Summary & Schedule',
+        heading: '📄 Summary, Scope, & Schedule',
+        chipLabel: 'Summary',
+        showTagsReview: true,
+        subs: [
+          { id: 'summary',  label: 'Summary' },
+          { id: 'scope',    label: 'Scope' },
+          { id: 'schedule', label: 'Schedule' },
+        ],
+        fields: [
+          { id: 'problem',       label: 'Problem Statement', kind: 'textarea', full: true, review: true,
+            initial: "north american sales targeted at 100 with an actual of 90 creating a gap of 10 and" },
+          { id: 'kpiTarget',     label: 'KPI Target' },
+          { id: 'kpiActual',     label: 'KPI Actual' },
+          { id: 'kpiGap',        label: 'KPI Gap' },
+          { id: 'kpiTrend',      label: 'KPI Trend' },
+          { id: 'processName',   label: 'Process Name' },
+          { id: 'processMapped', label: 'Process Mapped' },
+        ],
+      },
+      {
+        id: 'metrics',
+        icon: '📊',
+        title: 'Metrics & Deliverables',
+        heading: '📊 Metrics & Deliverables',
+        chipLabel: 'Metrics',
+        fields: [
+          { id: 'primaryMetric',   label: 'Primary Metric' },
+          { id: 'baseline',        label: 'Baseline' },
+          { id: 'goal',            label: 'Goal' },
+          { id: 'unit',            label: 'Unit of Measure' },
+          { id: 'deliverable1',    label: 'Deliverable 1', kind: 'textarea', full: true },
+          { id: 'deliverable2',    label: 'Deliverable 2', kind: 'textarea', full: true },
+        ],
+      },
+      {
+        id: 'daily',
+        icon: '🗓️',
+        title: 'Daily Milestones',
+        heading: '🗓️ Daily Milestones',
+        chipLabel: 'Daily Mi…',
+        fields: [
+          { id: 'day1', label: 'Day 1 Milestone', kind: 'textarea', full: true },
+          { id: 'day2', label: 'Day 2 Milestone', kind: 'textarea', full: true },
+          { id: 'day3', label: 'Day 3 Milestone', kind: 'textarea', full: true },
+          { id: 'day4', label: 'Day 4 Milestone', kind: 'textarea', full: true },
+          { id: 'day5', label: 'Day 5 Milestone', kind: 'textarea', full: true },
+        ],
+      },
+      {
+        id: 'team',
+        icon: '👥',
+        title: 'Team & On-Call',
+        heading: '👥 Team & On-Call',
+        chipLabel: 'Team Me…',
+        fields: [
+          { id: 'sponsor',     label: 'Executive Sponsor' },
+          { id: 'leader',      label: 'Team Leader' },
+          { id: 'facilitator', label: 'Facilitator' },
+          { id: 'members',     label: 'Team Members', kind: 'textarea', full: true },
+          { id: 'onCallPrimary',   label: 'On-Call Primary' },
+          { id: 'onCallSecondary', label: 'On-Call Secondary' },
+        ],
+      },
+      {
+        id: 'obstacles',
+        icon: '⚠️',
+        title: 'Obstacles & Resources',
+        heading: '⚠️ Obstacles & Resources',
+        chipLabel: 'Obstacles',
+        fields: [
+          { id: 'obstacle1',  label: 'Obstacle 1',  kind: 'textarea', full: true },
+          { id: 'obstacle2',  label: 'Obstacle 2',  kind: 'textarea', full: true },
+          { id: 'resource1',  label: 'Required Resource 1' },
+          { id: 'resource2',  label: 'Required Resource 2' },
+          { id: 'risks',      label: 'Risks & Mitigations', kind: 'textarea', full: true },
+        ],
+      },
+      {
+        id: 'sustain',
+        icon: '📈',
+        title: 'Sustainability Metrics',
+        heading: '📈 Sustainability Metrics',
+        chipLabel: 'Sustaina…',
+        fields: [
+          { id: 'controlPlan',     label: 'Control Plan', kind: 'textarea', full: true },
+          { id: 'auditFrequency',  label: 'Audit Frequency' },
+          { id: 'owner',           label: 'Process Owner' },
+          { id: 'reviewCadence',   label: 'Review Cadence' },
+          { id: 'successCriteria', label: 'Long-Term Success Criteria', kind: 'textarea', full: true },
+        ],
+      },
+    ];
+
+    const SECTION_WEIGHT = 100 / SECTIONS.length; // equal weight per section
+
+    function sectionCompletion(section, values) {
+      const total = section.fields.length;
+      if (total === 0) return 0;
+      const filled = section.fields.filter(f => {
+        const v = values[f.id];
+        return typeof v === 'string' && v.trim().length > 0;
+      }).length;
+      return filled / total; // 0..1
+    }
+
+    function buildInitialValues() {
+      const v = {};
+      SECTIONS.forEach(s => s.fields.forEach(f => {
+        if (f.initial != null) v[f.id] = f.initial;
+      }));
+      return v;
+    }
+
+    function Sections({ activeSection, activeSub, onSelect }) {
+      return (
+        <aside className="sections">
+          <h4>SECTIONS</h4>
+          {SECTIONS.map((s, idx) => (
+            <React.Fragment key={s.id}>
+              <div
+                className={"section-item" + (activeSection === s.id ? " active" : "")}
+                onClick={() => onSelect(s.id, s.subs && s.subs[0]?.id)}
+              >
+                <span className="icon">{s.icon}</span>
+                <span className="body">
+                  <span className="title">{s.title}</span>
+                  <span className="step">{`Step ${idx + 1} of ${SECTIONS.length}`}</span>
+                </span>
+              </div>
+              {s.subs && activeSection === s.id && (
+                <div className="sub-items">
+                  {s.subs.map(sub => (
+                    <div
+                      key={sub.id}
+                      className={activeSub === sub.id ? "active" : ""}
+                      onClick={() => onSelect(s.id, sub.id)}
+                    >
+                      {sub.label}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </React.Fragment>
+          ))}
+        </aside>
+      );
+    }
+
+    function TagsReview() {
+      return (
+        <div className="ai-review">
+          <div className="ai-review-head">
+            <h3>💡 AI Review — TAGS Framework</h3>
+            <span style={{ cursor: 'pointer', opacity: 0.8 }}>✕</span>
+          </div>
+          <p className="lede">
+            A strong problem statement uses the <strong>TAGS</strong> framework:
+            Target · Actual · Gap · Standard/Trend
+          </p>
+          <div className="tag-card">
+            <span className="tag t">T · Target</span><br />
+            The process should consistently meet the established target of 90,
+            aligned with customer requirements and leadership expectations.
+          </div>
+          <div className="tag-card">
+            <span className="tag a">A · Actual</span><br />
+            North American sales targeted at 100 with an actual of 90 creating a
+            gap of 10 and not improving over the last 3 months. The current
+            measured performance is 100, based on recent data.
+          </div>
+          <div className="tag-card">
+            <span className="tag g">G · Gap</span><br />
+            A consistent 10-point gap between target and actual performance over
+            the trailing three months indicates a stable but unresolved issue.
+          </div>
+        </div>
+      );
+    }
+
+    function Field({ field, value, onChange, onAskAi, onReview, asking, reviewing }) {
+      const labelText = field.label.toUpperCase();
+      return (
+        <div className="field-block">
+          <label>
+            {labelText}
+            <span className="label-actions">
+              {field.review && (
+                <button
+                  type="button"
+                  className="review-pill review-pill-active"
+                  disabled={reviewing}
+                  onClick={() => onReview(field)}
+                  title="Run a framework review on this field"
+                >
+                  {reviewing ? '… Reviewing' : '💡 Review'}
+                </button>
+              )}
+              <button
+                type="button"
+                className="ask-pill"
+                disabled={asking}
+                onClick={() => onAskAi(field)}
+                title="Ask the AI assistant about this field"
+              >
+                {asking ? '… Asking' : '✨ Ask AI'}
+              </button>
+            </span>
+          </label>
+          {field.kind === 'textarea' ? (
+            <textarea value={value || ''} onChange={e => onChange(field.id, e.target.value)} />
+          ) : (
+            <input type="text" value={value || ''} onChange={e => onChange(field.id, e.target.value)} />
+          )}
+        </div>
+      );
+    }
+
+    function MainPanel({ section, sectionIndex, values, onFieldChange, onAskAi, onReview, askingFieldId, reviewingFieldId, onPrev, onNext, prevLabel, nextLabel }) {
+      const fullFields = section.fields.filter(f => f.full);
+      const gridFields = section.fields.filter(f => !f.full);
+      return (
+        <section className="main">
+          <header className="topbar">
+            <div className="logo">📄</div>
+            <span className="title">Event Charter</span>
+            <span className="sep">|</span>
+            <span className="crumb">Untitled Charter</span>
+            <div className="spacer" />
+            <button className="btn btn-primary btn-icon">⬇ Export PDF</button>
+            <button className="icon-close" aria-label="Close">✕</button>
+          </header>
+
+          <div className="content">
+            <div className="content-header">
+              <h2>{section.heading}</h2>
+              <span className="step-count">{`Step ${sectionIndex + 1} of ${SECTIONS.length}`}</span>
+            </div>
+
+            {section.showTagsReview && <TagsReview />}
+
+            {fullFields.map(f => (
+              <Field
+                key={f.id}
+                field={f}
+                value={values[f.id]}
+                onChange={onFieldChange}
+                onAskAi={onAskAi}
+                onReview={onReview}
+                asking={askingFieldId === f.id}
+                reviewing={reviewingFieldId === f.id}
+              />
+            ))}
+
+            {gridFields.length > 0 && (
+              <div className="field-grid">
+                {gridFields.map(f => (
+                  <Field
+                    key={f.id}
+                    field={f}
+                    value={values[f.id]}
+                    onChange={onFieldChange}
+                    onAskAi={onAskAi}
+                    onReview={onReview}
+                    asking={askingFieldId === f.id}
+                    reviewing={reviewingFieldId === f.id}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          <footer className="footer-bar">
+            <button className="nav" onClick={onPrev} disabled={sectionIndex === 0}>
+              {prevLabel ? `‹ Back: ${prevLabel}` : '‹ Back'}
+            </button>
+            <div className="dots">
+              {SECTIONS.map((_, i) => (
+                <span key={i} className={"dot" + (i === sectionIndex ? " active" : "")} />
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+              <button className="nav" onClick={onNext} disabled={sectionIndex === SECTIONS.length - 1}>
+                {nextLabel ? `Next: ${nextLabel} ›` : 'Next ›'}
+              </button>
+              <button className="btn">Cancel</button>
+              <button className="btn btn-icon">💾 Save & Exit</button>
+              <button className="btn btn-primary btn-icon">✓ Create</button>
+            </div>
+          </footer>
+        </section>
+      );
+    }
+
+    function Assistant({ section, values, totalPercent, filledCount, totalCount, userId, onUserIdChange, aiState, onAskAiCurrentSection, onApplySuggestion, chatState, onChatSend }) {
+      const [tab, setTab] = useState('ai');
+      const [subTab, setSubTab] = useState('tips');
+      const [chatDraft, setChatDraft] = useState('');
+      const chatHistoryRef = React.useRef(null);
+
+      React.useEffect(() => {
+        if (tab === 'chat' && chatHistoryRef.current) {
+          chatHistoryRef.current.scrollTop = chatHistoryRef.current.scrollHeight;
+        }
+      }, [tab, chatState.messages.length, chatState.loading]);
+
+      const handleSendChat = () => {
+        const text = chatDraft.trim();
+        if (!text || chatState.loading) return;
+        setChatDraft('');
+        onChatSend(text);
+      };
+
+      const nextSection = SECTIONS.find(s => sectionCompletion(s, values) < 1 && s.id !== section.id);
+      const nextNote = nextSection
+        ? `Next: complete the ${nextSection.title} section.`
+        : 'All sections complete. Review and create your charter.';
+
+      return (
+        <aside className="assistant">
+          <div className="assistant-header">
+            <div className="avatar">🤖</div>
+            <div>
+              <div className="title">AI Assistant</div>
+              <div className="subtitle">Kaizen Charter Guide</div>
+            </div>
+            <div className="close">✕</div>
+          </div>
+
+          <div className="progress">
+            <div className="progress-head">
+              <span>CHARTER PROGRESS</span>
+              <span>{`${filledCount} of ${totalCount} fields · ${totalPercent}%`}</span>
+            </div>
+            <div className="progress-bar"><div style={{ width: `${totalPercent}%` }} /></div>
+          </div>
+
+          <div className="chips">
+            {SECTIONS.map(s => {
+              const pct = sectionCompletion(s, values);
+              const done = pct >= 1;
+              return (
+                <span
+                  key={s.id}
+                  className={"chip" + (done ? " done" : "")}
+                  title={`${Math.round(pct * 100)}% complete`}
+                >
+                  <span className="dotmark" /> {s.chipLabel}
+                </span>
+              );
+            })}
+          </div>
+          <div className="progress-note">{nextNote}</div>
+
+          <div className="assistant-card">
+            <div className="tips-for">{`Tips for: ${section.title}`}</div>
+
+            <div className="tabs">
+              <div className={"tab" + (tab === 'ai' ? " active" : "")} onClick={() => setTab('ai')}>✨ AI</div>
+              <div className={"tab" + (tab === 'chat' ? " active" : "")} onClick={() => setTab('chat')}>💬 Chat</div>
+              <div className={"tab" + (tab === 'suggest' ? " active" : "")} onClick={() => setTab('suggest')}>💡 Suggest</div>
+              <div className={"tab" + (tab === 'guide' ? " active" : "")} onClick={() => setTab('guide')}>📘 Guide Me</div>
+            </div>
+
+            {tab === 'ai' && (
+              <>
+                <div className="user-id-row">
+                  <span>User ID:</span>
+                  <input
+                    type="text"
+                    value={userId}
+                    onChange={e => onUserIdChange(e.target.value)}
+                    placeholder="e.g. demo-user"
+                  />
+                </div>
+                <div className="field-info" style={{ marginTop: 10 }}>
+                  <h5>FOUNDRY MEMORY AGENT</h5>
+                  <p>
+                    Click <b>✨ Ask AI</b> next to any field, or use the button below
+                    to get suggestions for the current section. Uses
+                    <code> POST /agents/foundryMemoryAgent</code>.
+                  </p>
+                </div>
+                <div style={{ padding: '0 16px 8px' }}>
+                  <button
+                    className="btn btn-primary btn-icon"
+                    onClick={onAskAiCurrentSection}
+                    disabled={aiState.loading}
+                    style={{ width: '100%' }}
+                  >
+                    {aiState.loading ? '… Asking agent' : `✨ Suggest tips for ${section.title}`}
+                  </button>
+                </div>
+                <div className="tips-list">
+                  {aiState.error && <div className="ai-error">{aiState.error}</div>}
+                  {!aiState.error && !aiState.response && !aiState.loading && (
+                    <div className="ai-empty">
+                      No agent response yet. Use “Ask AI” on a field or the button above.
+                    </div>
+                  )}
+                  {aiState.response && (
+                    <>
+                      <div className="ai-response">
+                        {aiState.fieldLabel && (
+                          <span className="ai-source">Re: {aiState.fieldLabel}</span>
+                        )}
+                        {aiState.response}
+                      </div>
+                      <Suggestions
+                        suggestions={extractSuggestions(aiState.response)}
+                        fieldId={aiState.fieldId}
+                        onApply={(text) => onApplySuggestion(aiState.fieldId, text)}
+                      />
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+
+            {tab === 'chat' && (
+              <div className="chat-pane">
+                <div className="chat-history" ref={chatHistoryRef}>
+                  {chatState.messages.length === 0 && !chatState.loading && (
+                    <div className="ai-empty" style={{ padding: '4px 0' }}>
+                      Ask anything — the agent remembers this conversation across sections.
+                    </div>
+                  )}
+                  {chatState.messages.map((m, i) => (
+                    <div key={i} className={`chat-bubble ${m.role}`}>{m.content}</div>
+                  ))}
+                  {chatState.loading && (
+                    <div className="chat-bubble assistant loading">… thinking</div>
+                  )}
+                  {chatState.error && <div className="ai-error">{chatState.error}</div>}
+                </div>
+                <div className="chat-input-row">
+                  <input
+                    type="text"
+                    value={chatDraft}
+                    onChange={e => setChatDraft(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleSendChat(); }}
+                    placeholder="Type a message…"
+                    disabled={chatState.loading}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSendChat}
+                    disabled={chatState.loading || !chatDraft.trim()}
+                  >
+                    Send
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {(tab === 'suggest' || tab === 'guide') && (
+              <>
+                <div className="all-fields">‹ All fields</div>
+
+                <div className="field-info">
+                  <h5>{section.title.toUpperCase()}</h5>
+                  <p>
+                    {`This section contributes ${SECTION_WEIGHT.toFixed(1)}% of overall progress. ` +
+                     `Complete all ${section.fields.length} field${section.fields.length === 1 ? '' : 's'} to mark it done.`}
+                  </p>
+                </div>
+
+                <div className="sub-tabs">
+                  <div className={"sub-tab" + (subTab === 'tips' ? " active" : "")} onClick={() => setSubTab('tips')}>Tips</div>
+                  <div className={"sub-tab" + (subTab === 'examples' ? " active" : "")} onClick={() => setSubTab('examples')}>Examples</div>
+                  <div className={"sub-tab" + (subTab === 'past' ? " active" : "")} onClick={() => setSubTab('past')}>Past Charters</div>
+                </div>
+
+                <div className="tips-list">
+                  {subTab === 'tips' && (
+                    <ol>
+                      {section.fields.slice(0, 5).map(f => (
+                        <li key={f.id}>{`Fill in "${f.label}" with specific, measurable detail.`}</li>
+                      ))}
+                    </ol>
+                  )}
+                  {subTab === 'examples' && (
+                    <ol>
+                      <li>"On-time delivery in NA dropped from 95% to 82% over the last quarter."</li>
+                      <li>"Defect rate on Line 3 averages 4.2% vs. target of 1.5%."</li>
+                    </ol>
+                  )}
+                  {subTab === 'past' && (
+                    <ol>
+                      <li>Charter #214 — Reduce cycle time in fulfillment.</li>
+                      <li>Charter #198 — Improve forecast accuracy for Q3.</li>
+                    </ol>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </aside>
+      );
+    }
+
+    async function callFoundryMemoryAgent({ userId, message, conversationId }) {
+      const res = await fetch('/agents/foundryMemoryAgent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, message, conversationId: conversationId ?? null }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Agent request failed (${res.status}): ${text || res.statusText}`);
+      }
+      return res.json(); // { userId, response, conversationId }
+    }
+
+    function buildSectionValues(section, values) {
+      const out = {};
+      section.fields.forEach(f => { out[f.label] = values[f.id] ?? ''; });
+      return out;
+    }
+
+    function buildFieldPrompt(section, field, values, userMessage = '') {
+      return JSON.stringify({
+        intent: 'field_help',
+        section: { id: section.id, title: section.title },
+        field:   { id: field.id,   label: field.label },
+        currentValue: values[field.id] ?? '',
+        sectionValues: buildSectionValues(section, values),
+        userMessage,
+      });
+    }
+
+    function buildSectionPrompt(section, values, userMessage = '') {
+      return JSON.stringify({
+        intent: userMessage ? 'freeform' : 'section_review',
+        section: { id: section.id, title: section.title },
+        field: null,
+        currentValue: '',
+        sectionValues: buildSectionValues(section, values),
+        userMessage,
+      });
+    }
+
+    function buildReviewPrompt(section, field, values, userMessage = '') {
+      return JSON.stringify({
+        intent: 'review',
+        section: { id: section.id, title: section.title },
+        field:   { id: field.id,   label: field.label },
+        currentValue: values[field.id] ?? '',
+        sectionValues: buildSectionValues(section, values),
+        userMessage,
+      });
+    }
+
+    function buildChatPrompt(section, values, userMessage) {
+      return JSON.stringify({
+        intent: 'chat',
+        section: { id: section.id, title: section.title },
+        field: null,
+        currentValue: '',
+        sectionValues: buildSectionValues(section, values),
+        userMessage,
+      });
+    }
+
+    // Parse the agent's Markdown response into clickable suggestions.
+    // Returns { primary: string|null, alternatives: string[] }.
+    //   - primary: text from the "Suggested wording" blockquote (>) — the main paste-ready answer.
+    //   - alternatives: bullet items from the "Tips for ..." list — shorter snippets the user
+    //     can also drop into the field as a starting point.
+    function extractSuggestions(markdown) {
+      if (!markdown || typeof markdown !== 'string') return { primary: null, alternatives: [] };
+
+      // Primary = consecutive blockquote lines (lines starting with "> ").
+      const lines = markdown.split(/\r?\n/);
+      const quoteLines = [];
+      let inQuote = false;
+      for (const line of lines) {
+        const m = line.match(/^\s*>\s?(.*)$/);
+        if (m) {
+          quoteLines.push(m[1]);
+          inQuote = true;
+        } else if (inQuote && line.trim() === '') {
+          // allow blank line inside quote
+          quoteLines.push('');
+        } else if (inQuote) {
+          break;
+        }
+      }
+      const primary = quoteLines.length > 0 ? quoteLines.join('\n').trim() : null;
+
+      // Alternatives = bullet lines ("- ..." or "* ...") that are not blockquotes.
+      const alternatives = [];
+      for (const line of lines) {
+        const m = line.match(/^\s*[-*]\s+(.+)$/);
+        if (m) {
+          const text = m[1].trim();
+          // strip leading bold markdown like **Tips for ...**
+          const cleaned = text.replace(/\*\*/g, '').trim();
+          if (cleaned.length > 0) alternatives.push(cleaned);
+        }
+      }
+
+      return { primary, alternatives };
+    }
+
+    function Suggestions({ suggestions, fieldId, onApply }) {
+      const { primary, alternatives } = suggestions;
+      if (!primary && alternatives.length === 0) return null;
+      const canApply = !!fieldId;
+      const applyTitle = canApply
+        ? 'Replace the field value with this suggestion'
+        : 'Open a specific field via "✨ Ask AI" to apply this suggestion';
+      return (
+        <div className="suggestion-list">
+          {primary && (
+            <div className="suggestion-item primary">
+              <div className="text">
+                <span className="kind">Suggested wording</span>
+                {primary}
+              </div>
+              <button
+                type="button"
+                disabled={!canApply}
+                title={applyTitle}
+                onClick={() => onApply(primary)}
+              >
+                Use this
+              </button>
+            </div>
+          )}
+          {alternatives.map((alt, i) => (
+            <div key={i} className="suggestion-item">
+              <div className="text">
+                <span className="kind">Tip {i + 1}</span>
+                {alt}
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    function App() {
+      const [activeSectionId, setActiveSectionId] = useState(SECTIONS[0].id);
+      const [activeSub, setActiveSub] = useState(SECTIONS[0].subs?.[0]?.id);
+      const [values, setValues] = useState(buildInitialValues);
+      const [userId, setUserId] = useState('demo-user');
+      const [conversationId, setConversationId] = useState(null);
+      const [askingFieldId, setAskingFieldId] = useState(null);
+      const [reviewingFieldId, setReviewingFieldId] = useState(null);
+      const [aiState, setAiState] = useState({ loading: false, response: '', error: '', fieldLabel: '', fieldId: null });
+      // Chat keeps its own conversationId so it doesn't pollute the field-help thread.
+      const [chatState, setChatState] = useState({
+        loading: false,
+        error: '',
+        conversationId: null,
+        messages: [], // [{ role: 'user' | 'assistant', content: string }]
+      });
+
+      const sectionIndex = SECTIONS.findIndex(s => s.id === activeSectionId);
+      const section = SECTIONS[sectionIndex];
+
+      const handleFieldChange = (id, value) => {
+        setValues(prev => ({ ...prev, [id]: value }));
+      };
+
+      const askAgent = async ({ prompt, fieldLabel, fieldId, mode }) => {
+        if (!userId || !userId.trim()) {
+          setAiState({ loading: false, response: '', error: 'Please set a User ID first.', fieldLabel, fieldId: fieldId ?? null });
+          return;
+        }
+        if (mode === 'review') setReviewingFieldId(fieldId ?? null);
+        else setAskingFieldId(fieldId ?? null);
+        setAiState({ loading: true, response: '', error: '', fieldLabel, fieldId: fieldId ?? null });
+        try {
+          const result = await callFoundryMemoryAgent({
+            userId: userId.trim(),
+            message: prompt,
+            conversationId,
+          });
+          if (result.conversationId) setConversationId(result.conversationId);
+          setAiState({
+            loading: false,
+            response: result.response || '(empty response)',
+            error: '',
+            fieldLabel,
+            fieldId: fieldId ?? null,
+          });
+        } catch (err) {
+          setAiState({ loading: false, response: '', error: err.message || String(err), fieldLabel, fieldId: fieldId ?? null });
+        } finally {
+          if (mode === 'review') setReviewingFieldId(null);
+          else setAskingFieldId(null);
+        }
+      };
+
+      const handleAskAiForField = (field) => {
+        askAgent({
+          prompt: buildFieldPrompt(section, field, values),
+          fieldLabel: field.label,
+          fieldId: field.id,
+          mode: 'ask',
+        });
+      };
+
+      const handleReviewField = (field) => {
+        askAgent({
+          prompt: buildReviewPrompt(section, field, values),
+          fieldLabel: `${field.label} (Review)`,
+          fieldId: field.id,
+          mode: 'review',
+        });
+      };
+
+      const handleAskAiForSection = () => {
+        askAgent({
+          prompt: buildSectionPrompt(section, values),
+          fieldLabel: section.title,
+          fieldId: null,
+          mode: 'ask',
+        });
+      };
+
+      const handleChatSend = async (userText) => {
+        if (!userId || !userId.trim()) {
+          setChatState(prev => ({ ...prev, error: 'Please set a User ID first.' }));
+          return;
+        }
+        setChatState(prev => ({
+          ...prev,
+          loading: true,
+          error: '',
+          messages: [...prev.messages, { role: 'user', content: userText }],
+        }));
+        try {
+          const result = await callFoundryMemoryAgent({
+            userId: userId.trim(),
+            message: buildChatPrompt(section, values, userText),
+            conversationId: chatState.conversationId,
+          });
+          setChatState(prev => ({
+            ...prev,
+            loading: false,
+            conversationId: result.conversationId ?? prev.conversationId,
+            messages: [...prev.messages, { role: 'assistant', content: result.response || '(empty response)' }],
+          }));
+        } catch (err) {
+          setChatState(prev => ({
+            ...prev,
+            loading: false,
+            error: err.message || String(err),
+          }));
+        }
+      };
+
+      const goTo = (i) => {
+        if (i < 0 || i >= SECTIONS.length) return;
+        const s = SECTIONS[i];
+        setActiveSectionId(s.id);
+        setActiveSub(s.subs?.[0]?.id);
+      };
+
+      const { totalPercent, filledCount, totalCount } = useMemo(() => {
+        let percentSum = 0;
+        let filled = 0;
+        let total = 0;
+        SECTIONS.forEach(s => {
+          percentSum += sectionCompletion(s, values) * SECTION_WEIGHT;
+          total += s.fields.length;
+          filled += s.fields.filter(f => {
+            const v = values[f.id];
+            return typeof v === 'string' && v.trim().length > 0;
+          }).length;
+        });
+        return {
+          totalPercent: Math.round(percentSum),
+          filledCount: filled,
+          totalCount: total,
+        };
+      }, [values]);
+
+      return (
+        <div className="app-shell">
+          <Sections
+            activeSection={activeSectionId}
+            activeSub={activeSub}
+            onSelect={(s, sub) => { setActiveSectionId(s); if (sub) setActiveSub(sub); }}
+          />
+          <MainPanel
+            section={section}
+            sectionIndex={sectionIndex}
+            values={values}
+            onFieldChange={handleFieldChange}
+            onAskAi={handleAskAiForField}
+            onReview={handleReviewField}
+            askingFieldId={askingFieldId}
+            reviewingFieldId={reviewingFieldId}
+            onPrev={() => goTo(sectionIndex - 1)}
+            onNext={() => goTo(sectionIndex + 1)}
+            prevLabel={SECTIONS[sectionIndex - 1]?.title}
+            nextLabel={SECTIONS[sectionIndex + 1]?.title}
+          />
+          <Assistant
+            section={section}
+            values={values}
+            totalPercent={totalPercent}
+            filledCount={filledCount}
+            totalCount={totalCount}
+            userId={userId}
+            onUserIdChange={setUserId}
+            aiState={aiState}
+            onAskAiCurrentSection={handleAskAiForSection}
+            onApplySuggestion={(fieldId, text) => {
+              if (fieldId) handleFieldChange(fieldId, text);
+            }}
+            chatState={chatState}
+            onChatSend={handleChatSend}
+          />
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

@@ -10,15 +10,25 @@ namespace AgentHub.API.services.conversations;
 /// </summary>
 public abstract class CosmosRepositoryBase
 {
+    /// <summary>The shared Cosmos client (token-credential based).</summary>
     protected readonly CosmosClient Client;
+    /// <summary>Database name resolved from <see cref="CosmosOptions"/>.</summary>
     protected readonly string DatabaseName;
+    /// <summary>Container name supplied by the derived repository.</summary>
     protected readonly string ContainerName;
+    /// <summary>Partition key path (e.g., <c>/conversationId</c>) supplied by the derived repository.</summary>
     protected readonly string PartitionKeyPath;
+    /// <summary>Logger used for initialization/diagnostic output.</summary>
     protected readonly ILogger Logger;
-    
+
+    // Ensures CreateDatabase/CreateContainer only runs once per process even under concurrent first calls.
     private readonly SemaphoreSlim _initializationGate = new(1, 1);
+    /// <summary>Cached container reference populated after first successful initialization.</summary>
     protected Container? Container;
 
+    /// <summary>
+    /// Validates required options and constructs the underlying <see cref="CosmosClient"/> using <see cref="DefaultAzureCredential"/>.
+    /// </summary>
     protected CosmosRepositoryBase(
         CosmosOptions options,
         string containerName,

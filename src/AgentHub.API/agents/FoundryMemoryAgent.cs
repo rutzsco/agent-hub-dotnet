@@ -3,6 +3,8 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using AgentHub.API.services.search;
+using AgentHub.API.Services.Skills.Validation;
 using Azure.AI.Projects;
 using Azure.AI.Projects.Agents;
 using Azure.AI.Projects.Memory;
@@ -18,21 +20,70 @@ namespace AgentHub.API.Agents;
 #pragma warning disable OPENAI001
 
 /// <summary>
-/// Holds the Foundry memory agent and related clients.
-/// Registered as a singleton; the route handler injects this directly.
-/// No application-level session caching - Foundry manages short-term context
-/// via its thread model and long-term memory via FoundryMemoryProvider.
+/// Foundry-managed conversational agent with per-user long-term memory.
+///
+/// Memory model:
+/// - Short-term (per conversation): stored server-side as a Foundry thread
+///   (ChatClientAgentSession). We only carry the conversationId on the wire;
+///   prior turns are never replayed by the client.
+/// - Long-term (per user): stored server-side in a Foundry Memory Store
+///   (AIProjectMemoryStores) created/resolved at startup. Foundry owns
+///   embeddings, vector search, user profile, and chat summaries.
+///
+/// Session hydration:
+/// - New conversation (conversationId == null) -> Agent.CreateConversationSessionAsync
+///   creates a fresh Foundry thread; Foundry returns a new conversationId.
+/// - Follow-up (conversationId provided) -> BaseAgent.CreateSessionAsync(conversationId)
+///   resumes the existing thread. Foundry rehydrates context from its own state.
+///
+/// Long-term memory orchestration:
+/// - FoundryMemoryProvider is attached client-side via the AsAIAgent chatClient
+///   transform (AIContextProviderChatClient). The provider:
+///     1. Before each run: searches the memory store scoped to the current
+///        userId and injects relevant memories into the prompt.
+///     2. After each run: persists the new user/assistant turn back to the
+///        memory store under the same scope.
+/// - Per-user scoping is provided by setting an AsyncLocal&lt;string?&gt; _currentUserId
+///   for the duration of the request; the provider reads it via stateInitializer.
+/// - Our process never holds memory bytes; it only supplies the scope key and
+///   triggers retrieve/persist hooks.
+///
+/// System prompt:
+/// - Sourced from AgentHub:MemoryAgentInstructions in configuration; falls back
+///   to KaiCharterSystemPrompt constant.
+/// - Foundry bakes instructions at agent creation. To roll out a new prompt,
+///   bump AgentHub:FoundryAgentName so a fresh agent is provisioned.
+///
+/// Naming note:
+/// - IChatClient / "chatClient transform" refers to the Microsoft.Extensions.AI
+///   abstraction used for client-side middleware. It is NOT the Azure OpenAI
+///   /chat/completions REST endpoint. Foundry decides Chat Completions vs.
+///   Responses API server-side based on the model and tools attached.
+/// </summary>
+/// <summary>
+/// Bundle of Foundry handles required to drive the memory agent end-to-end:
+/// the <see cref="AIAgent"/> wrapper, the underlying <see cref="ChatClientAgent"/> (for session resumption),
+/// the memory store client, and the active store name.
 /// </summary>
 public sealed class FoundryMemoryContext
 {
+    /// <summary>The Foundry agent wrapper, wired with the <c>FoundryMemoryProvider</c> chat-client transform.</summary>
     public required FoundryAgent Agent { get; init; }
+    /// <summary>The underlying chat-client agent, used to resume existing Foundry threads by conversation id.</summary>
     public required ChatClientAgent BaseAgent { get; init; }
+    /// <summary>Client for direct Foundry memory store operations (search, delete).</summary>
     public required AIProjectMemoryStores MemoryClient { get; init; }
+    /// <summary>Name of the active Foundry memory store.</summary>
     public required string MemoryStoreName { get; init; }
 }
 
+/// <summary>
+/// Factory and message-processing helpers for the Foundry-managed memory agent.
+/// See the file-header comment on <see cref="FoundryMemoryContext"/> for the full memory model.
+/// </summary>
 public static class FoundryMemoryAgent
 {
+    /// <summary>Default Foundry agent name when no override is configured.</summary>
     public const string DefaultAgentName = "MemoryAgent";
     private static readonly Regex UserIdPattern = new(@"^[a-zA-Z0-9][a-zA-Z0-9._%+@\-]{0,127}$", RegexOptions.Compiled);
 
@@ -42,7 +93,189 @@ public static class FoundryMemoryAgent
     /// </summary>
     private static readonly AsyncLocal<string?> _currentUserId = new();
 
+    internal const string KaiCharterSystemPrompt = """
+        You are KAI - the Kaizen Charter Guide.
+
+        Your job is to help a user fill out a structured "Event Charter" form, one
+        field at a time. The user interacts with you through a UI that always tells
+        you exactly which SECTION and FIELD they need help with, and what they have
+        written so far. You do not need to ask them which field - trust the
+        structured context provided in each request.
+
+        # Charter structure (6 sections, weighted equally)
+        1. Summary & Schedule - Problem Statement, KPI Target, KPI Actual, KPI Gap,
+           KPI Trend, Process Name, Process Mapped.
+        2. Metrics & Deliverables - Primary Metric, Baseline, Goal, Unit of Measure,
+           Deliverables.
+        3. Daily Milestones - Day 1-5 milestones for the kaizen event week.
+        4. Team & On-Call - Executive Sponsor, Team Leader, Facilitator, Members,
+           On-Call Primary/Secondary.
+        5. Obstacles & Resources - Obstacles, Required Resources, Risks &
+           Mitigations.
+        6. Sustainability Metrics - Control Plan, Audit Frequency, Process Owner,
+           Review Cadence, Long-Term Success Criteria.
+
+        # Request format you will receive
+        Every user message is a JSON object with this shape:
+
+        {
+          "intent": "field_help" | "review" | "section_review" | "chat" | "freeform",
+          "section": { "id": "...", "title": "..." },
+          "field":   { "id": "...", "label": "..." } | null,
+          "currentValue": "<what the user has typed in this field>" | "",
+          "sectionValues": {
+            "<fieldLabel>": "<value or empty string>",
+            ...
+          },
+          "userMessage": "<optional free-form note from the user>" | ""
+        }
+
+        Treat this JSON as authoritative ground truth. If a field is empty, that
+        means the user has not written anything yet. Use sectionValues to keep
+        your suggestions consistent with what is already filled in elsewhere in
+        the same section.
+
+        # Frameworks to apply
+        - Problem Statement -> use the TAGS framework: Target, Actual, Gap,
+          Standard/Trend. Always include a quantified gap and a time horizon.
+        - KPI fields -> require a unit, a numeric value, and a clear definition.
+          Flag inconsistency if Target - Actual != Gap.
+        - Daily Milestones -> ensure each day has a measurable deliverable and
+          builds on the previous day.
+        - Team & On-Call -> require named roles, not generic titles.
+        - Obstacles & Resources -> each obstacle should pair with a mitigation
+          and a required resource.
+        - Sustainability -> require an owner, a cadence, and a measurable success
+          criterion.
+
+        # Field semantics (DO NOT confuse these)
+        Each field is independent and serves a different purpose. Never suggest
+        that one field's value should be copied into, replaced by, or kept in
+        sync with another field's value. They live side-by-side and together
+        tell the full story.
+
+        - Problem Statement (Summary & Schedule): a *narrative* sentence (or
+          two) describing the current state in business language. It MAY
+          mention numbers from the KPI fields for context, but it is prose.
+          It is NOT a place to put a single number, a unit, or a KPI value.
+        - KPI Target: the numeric goal value only. Example: "100 units/week"
+          or "95% on-time".
+        - KPI Actual: the numeric current measured value only. Example:
+          "90 units/week" or "82% on-time". This must be a DIFFERENT number
+          than KPI Target (otherwise there is no gap).
+        - KPI Gap: the numeric difference (Target - Actual) with the same unit.
+          Example: "10 units/week" or "13 percentage points".
+        - KPI Trend: a short directional phrase. Example: "flat for 3 months",
+          "declining since Q2", "improving slowly".
+        - Process Name: the named business process. Example: "NA Sales
+          Fulfillment".
+        - Process Mapped: yes/no plus link or reference. Example: "Yes -
+          process map v3 in SharePoint".
+
+        Hard rules for these fields:
+        - Never recommend that Problem Statement should equal or restate KPI
+          Actual / Target / Gap. The Problem Statement may *cite* those
+          numbers but must add narrative context (where, when, who is
+          impacted, time horizon).
+        - Never recommend changing the unit in Problem Statement to "match"
+          KPI fields. Units belong on the KPI fields. The narrative inherits
+          them by reference.
+        - If KPI Target == KPI Actual, do NOT suggest making them equal.
+          Instead, flag this as a problem (no gap = no improvement
+          opportunity) and ask the user to verify.
+        - When suggesting wording for the Problem Statement, write a sentence
+          that USES the KPI numbers from sectionValues, not one that DUPLICATES
+          a single KPI field's value.
+
+        # Response format
+        Respond in Markdown, kept short (under ~200 words). Use this structure
+        when the intent is field_help:
+
+        **Tips for "<field label>"**
+        - 1 to 3 short, specific bullets.
+
+        **Suggested wording**
+        > A single concrete example the user could paste into the field, tailored
+        > to their currentValue and sectionValues.
+
+        When the intent is section_review:
+
+        **Section: <section title>**
+        - Bulleted critique covering what is missing, what could be sharper, and
+          what to write next.
+        - End with one sentence naming the single most important next step.
+
+        When the intent is review (per-field framework check):
+
+        Run a strict rubric-style review of `currentValue` against the framework
+        for this field (see "Frameworks to apply"). Use this exact format:
+
+        **Review: "<field label>"**
+        - ✅ <rule that passes> — short evidence quote from currentValue.
+        - ❌ <rule that fails> — what is missing or wrong, in <= 12 words.
+        - ⚠️ <rule that is borderline> — what would tighten it, in <= 12 words.
+
+        **Suggested wording**
+        > A revised version of currentValue that satisfies every ❌ and ⚠️ rule.
+        > Reuse the user's own numbers and terminology. Never invent numbers.
+
+        If currentValue is empty, list every framework rule as ❌ and write the
+        Suggested wording as a fresh draft using only values from sectionValues
+        (or example placeholders prefixed with "Example:").
+
+        When the intent is freeform, answer the userMessage directly but stay on
+        the topic of the current section/field.
+
+        When the intent is chat:
+
+        Reply conversationally to userMessage in 1-3 short paragraphs of plain
+        prose. Stay on topic of Kaizen / process improvement / the current
+        charter section. You may reference sectionValues for context, but:
+        - Do NOT output the rubric formats above.
+        - Do NOT output a "Suggested wording" blockquote (chat replies are not
+          meant to be pasted into form fields).
+        - Do NOT output bulleted tip lists unless the user explicitly asks.
+        - Use persistent memory to remember things the user tells you across
+          turns (their team, KPIs, preferred terminology).
+        - If the user asks for help filling out a specific field, redirect them
+          to use the "Ask AI" or "Review" buttons next to that field instead of
+          answering with form-ready content here.
+
+        # Hard rules
+        - Never invent numbers the user has not provided. If you suggest example
+          numbers, prefix them with "Example:" so it is obvious they are
+          illustrative.
+        - Do not propose solutions inside the Problem Statement field - only
+          describe the current state.
+        - Do not output JSON. Do not echo the request back. Do not add
+          meta-commentary like "Sure, here are some tips".
+        - Use the user's own words and numbers from sectionValues whenever
+          possible to keep tone consistent across fields.
+        - If the request is ambiguous, ask exactly one clarifying question
+          instead of guessing.
+        - You have persistent memory scoped to this user across charters - use it
+          to keep terminology, KPI definitions, and team names consistent with
+          past sessions, but never reveal another user's data.
+        """;
+
+    /// <summary>
+    /// Initializes the Foundry memory agent: resolves/creates the memory store, attaches the memory provider
+    /// as a chat-client transform, and returns a <see cref="FoundryMemoryContext"/> for request-time use.
+    /// </summary>
     public static async Task<FoundryMemoryContext> CreateAsync(Settings settings, ILogger logger)
+    {
+        return await CreateAsync(settings, logger, retriever: null);
+    }
+
+    /// <summary>
+    /// Overload that additionally registers the <see cref="LeanKnowledgeTool"/> function tool
+    /// when a <paramref name="retriever"/> is supplied, enabling tool-call RAG over the
+    /// Lean/Kaizen Azure AI Search index.
+    /// </summary>
+    public static async Task<FoundryMemoryContext> CreateAsync(
+        Settings settings,
+        ILogger logger,
+        LeanSearchRetriever? retriever)
     {
         logger.LogInformation(
             "Initializing Foundry memory agent. Endpoint={Endpoint}, MemoryStore={MemoryStore}, EmbeddingModel={EmbeddingModel}",
@@ -50,7 +283,7 @@ public static class FoundryMemoryAgent
             settings.MemoryStoreName,
             settings.MemoryEmbeddingModel);
 
-        var client = new AIProjectClient(settings.RequireAzureAIProjectEndpoint(), new DefaultAzureCredential());
+        var client = new AIProjectClient(settings.AzureAIProjectEndpoint, settings.CreateAzureCredential());
         var memoryClient = client.GetAIProjectMemoryStoresClient();
 
         var memoryStore = await GetOrCreateMemoryStoreAsync(memoryClient, settings, logger);
@@ -72,10 +305,20 @@ public static class FoundryMemoryAgent
         logger.LogInformation("Foundry memory agent is ready. AgentName={AgentName}", record.Name);
 
         // Build server-side Foundry agent wrapper and attach FoundryMemoryProvider
-        // via chatClient transform.
+        // via chatClient transform. When a retriever is supplied, register the Lean
+        // knowledge tool so the model can call it for grounded answers (tool-call RAG).
+        var tools = retriever is null
+            ? Array.Empty<AITool>()
+            : new AITool[] { LeanKnowledgeTool.Create(retriever, settings.AzureSearchTopK) };
+
+        if (retriever is not null)
+        {
+            logger.LogInformation("Registering Lean knowledge tool for tool-call RAG. ToolName={ToolName}", LeanKnowledgeTool.ToolName);
+        }
+
         var agent = (FoundryAgent)client.AsAIAgent(
             record,
-            [],
+            tools,
             inner => CreateContextProviderChatClient(inner, memoryProvider),
             null);
 
@@ -90,8 +333,13 @@ public static class FoundryMemoryAgent
         };
     }
 
+    /// <summary>
+    /// Validates the request, runs the agent with per-user memory scoping, and returns the assistant reply.
+    /// Creates a new Foundry thread when <paramref name="conversationId"/> is null; resumes the existing thread otherwise.
+    /// </summary>
     public static async Task<MemoryAgentMessageResult> ProcessMessage(
         FoundryMemoryContext memoryContext,
+        PromptValidationSkill validationSkill,
         string message,
         string userId,
         string? conversationId,
@@ -99,6 +347,24 @@ public static class FoundryMemoryAgent
         CancellationToken cancellationToken)
     {
         ValidateRequest(message, userId, logger);
+
+        // Validate prompt for safety before processing
+        var validationResult = await validationSkill.ExecuteAsync(
+            new PromptValidationInput { Prompt = message, UserId = userId },
+            cancellationToken);
+
+        if (!validationResult.IsValid)
+        {
+            logger.LogWarning(
+                "Prompt validation failed for Foundry memory agent. UserId={UserId}, Rule={FailedRule}, Error={ErrorMessage}",
+                userId,
+                validationResult.FailedRule,
+                validationResult.ErrorMessage);
+
+            throw new ArgumentException(
+                validationResult.ErrorMessage ?? "Prompt validation failed",
+                nameof(message));
+        }
 
         // Set userId so FoundryMemoryProvider.stateInitializer can scope memory to this user.
         _currentUserId.Value = userId;
@@ -255,7 +521,9 @@ public static class FoundryMemoryAgent
 
             var definition = new DeclarativeAgentDefinition(model: settings.AzureAIModelDeploymentName)
             {
-                Instructions = "You are a helpful assistant with persistent memory. You remember context from previous conversations."
+                Instructions = string.IsNullOrWhiteSpace(settings.MemoryAgentInstructions)
+                    ? KaiCharterSystemPrompt
+                    : settings.MemoryAgentInstructions
             };
 
             var options = new ProjectsAgentVersionCreationOptions(definition);

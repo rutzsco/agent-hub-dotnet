@@ -9,12 +9,22 @@ using AgentHub.API.services.session;
 
 namespace AgentHub.API.Agents;
 
+/// <summary>
+/// Factory and message-processing helpers for the Foundry-managed "demo" agent.
+/// Unlike <see cref="DemoAzureOpenAIAgent"/>, conversation history is owned by the
+/// Foundry service (thread-based) so the client never replays prior turns.
+/// </summary>
 public static class FoundryDemoAgent
 {
+    /// <summary>Default agent name used when <see cref="Settings.FoundryAgentName"/> is not set.</summary>
     public const string DefaultName = "demo-basic-agent";
+    // Foundry's allowed agent-name character set (mirrors the service-side validation).
     private static readonly Regex AgentNamePattern = new("^[A-Za-z0-9._-]{1,64}$", RegexOptions.Compiled);
 
 #pragma warning disable OPENAI001 // FoundryAgent is experimental
+    /// <summary>
+    /// Resolves an existing Foundry agent by name or creates a new version, returning a ready-to-use <see cref="FoundryAgent"/>.
+    /// </summary>
     public static async Task<FoundryAgent> CreateAsync(Settings settings, ILogger logger)
     {
         logger.LogInformation(
@@ -23,7 +33,7 @@ public static class FoundryDemoAgent
             settings.AzureAIModelDeploymentName,
             settings.FoundryAgentName ?? DefaultName);
 
-        var client = new AIProjectClient(settings.RequireAzureAIProjectEndpoint(), new DefaultAzureCredential());
+        var client = new AIProjectClient(settings.AzureAIProjectEndpoint, settings.CreateAzureCredential());
         var agentName = settings.FoundryAgentName ?? DefaultName;
 
         ValidateAgentName(agentName);
@@ -44,6 +54,9 @@ public static class FoundryDemoAgent
 #pragma warning restore OPENAI001
 
 #pragma warning disable OPENAI001 // FoundryAgent is experimental
+    /// <summary>
+    /// Sends a single user message to the Foundry agent, persisting the service-side conversation id.
+    /// </summary>
     public static async Task<AgentMessageResult> ProcessMessage(
         FoundryAgent agent,
         IConversationSessionManager sessionManager,
@@ -79,6 +92,9 @@ public static class FoundryDemoAgent
     }
 #pragma warning restore OPENAI001
 
+    /// <summary>
+    /// Looks up the Foundry agent by name; on 404, creates a new agent version with the demo definition.
+    /// </summary>
     private static async Task<ProjectsAgentRecord> GetOrCreateAgentAsync(
         AIProjectClient client, string agentName, string model, ILogger logger)
     {

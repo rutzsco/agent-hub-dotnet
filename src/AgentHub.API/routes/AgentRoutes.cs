@@ -5,16 +5,26 @@ using AgentHub.API.services.conversations;
 using AgentHub.API.services.session;
 using AgentHub.API.Services;
 using AgentHub.API.Services.Memory;
+using AgentHub.API.Services.Skills.Validation;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Foundry;
 
 namespace AgentHub.API.Routes;
 
+/// <summary>
+/// Minimal-API endpoint mappings for every agent and memory-management route in AgentHub.
+/// Kept as an extension method on <see cref="WebApplication"/> so <c>Program.cs</c> stays a one-liner.
+/// </summary>
 public static partial class AgentRoutes
 {
+    /// <summary>Source-generated regex validating userId path/body inputs.</summary>
     [GeneratedRegex(@"^[a-zA-Z0-9][a-zA-Z0-9._%+@\-]{0,127}$", RegexOptions.Compiled)]
     internal static partial Regex UserIdPattern();
 
+    /// <summary>
+    /// Registers all AgentHub endpoints: demo agent, Foundry demo agent, Foundry memory agent,
+    /// memory inspect/delete, and conversation history.
+    /// </summary>
     public static WebApplication MapAgentRoutes(this WebApplication app)
     {
         app.MapPost("/agents/demo-aoai-agent", async (
@@ -97,6 +107,8 @@ public static partial class AgentRoutes
 #pragma warning restore OPENAI001
 
         app.MapPost("/agents/foundryMemoryAgent", async (
+            //FoundryMemoryContext memoryContext,
+            PromptValidationSkill validationSkill,
             IServiceProvider serviceProvider,
             MemoryAgentRequest request,
             HttpContext httpContext,
@@ -118,6 +130,7 @@ public static partial class AgentRoutes
                 var memoryContext = serviceProvider.GetRequiredService<FoundryMemoryContext>();
                 var result = await FoundryMemoryAgent.ProcessMessage(
                     memoryContext,
+                    validationSkill,
                     request.Message,
                     request.UserId,
                     request.ConversationId,
@@ -283,6 +296,10 @@ public static partial class AgentRoutes
         return app;
     }
 
+    /// <summary>
+    /// Identifies Foundry responses that were rejected by the content-safety filter so the route
+    /// can return a friendly 400 rather than a generic 500.
+    /// </summary>
     private static bool IsFoundryContentFilterError(ClientResultException ex)
     {
         if (ex.Status != 400)
