@@ -61,17 +61,9 @@ public class Settings
     public string CosmosMemoryAuditContainerName { get; init; } = "memory-audit";
     /// <summary>Azure AI Search endpoint; when null, search index registration is skipped.</summary>
     public Uri? AzureSearchEndpoint { get; init; }
-    public int AzureSearchTopK { get; init; } = 5;
     public string AzureSearchEmbeddingDeployment { get; init; } = "text-embedding-3-small";
     public string AzureSearchEmbeddingModel { get; init; } = "text-embedding-3-small";
     public int AzureSearchEmbeddingDimensions { get; init; } = 1536;
-
-    /// <summary>
-    /// When true, the client-side <c>LeanKnowledgeTool</c> is NOT registered on the agent.
-    /// Use this to demo a Foundry agent that has the Azure AI Search knowledge source
-    /// attached server-side (configured in the Foundry portal). Default: false (client-side tool).
-    /// </summary>
-    public bool UseServerSideSearchTool { get; init; }
 
     /// <summary>
     /// Reads configuration from the <c>AgentHub</c> section (with env-var fallbacks) and builds a populated <see cref="Settings"/>.
@@ -173,16 +165,6 @@ public class Settings
             ? null
             : new Uri(azureSearchEndpointValue);
 
-        var azureSearchTopKValue = agentHubSection.GetSection("AzureSearch")["TopK"]
-            ?? configuration["AZURE_SEARCH_TOP_K"];
-        var azureSearchTopK = int.TryParse(azureSearchTopKValue, out var parsedTopK) && parsedTopK > 0
-            ? parsedTopK
-            : 5;
-
-        var useServerSideSearchToolValue = agentHubSection.GetSection("AzureSearch")["UseServerSideTool"]
-            ?? configuration["AZURE_SEARCH_USE_SERVER_SIDE_TOOL"];
-        var useServerSideSearchTool = bool.TryParse(useServerSideSearchToolValue, out var parsedFlag) && parsedFlag;
-
         var azureSearchEmbeddingDeployment = agentHubSection.GetSection("AzureSearch")["EmbeddingDeployment"]
             ?? configuration["AZURE_SEARCH_EMBEDDING_DEPLOYMENT"]
             ?? "text-embedding-3-small";
@@ -212,8 +194,6 @@ public class Settings
             CosmosConversationContainerName = cosmosConversationContainerName,
             CosmosMemoryAuditContainerName = cosmosMemoryAuditContainerName,
             AzureSearchEndpoint = azureSearchEndpoint,
-            AzureSearchTopK = azureSearchTopK,
-            UseServerSideSearchTool = useServerSideSearchTool,
             AzureSearchEmbeddingDeployment = azureSearchEmbeddingDeployment,
             AzureSearchEmbeddingModel = azureSearchEmbeddingModel,
             AzureSearchEmbeddingDimensions = azureSearchEmbeddingDimensions

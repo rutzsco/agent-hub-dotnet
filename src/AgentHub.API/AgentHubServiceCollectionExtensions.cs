@@ -4,7 +4,6 @@ using AgentHub.API.services.search;
 using AgentHub.API.services.session;
 using AgentHub.API.Services.Memory;
 using AgentHub.API.Services.Skills.Validation;
-using Azure.AI.OpenAI;
 using Azure.Search.Documents.Indexes;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Foundry;
@@ -143,44 +142,20 @@ public static class AgentHubServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Conditionally registers an Azure AI Search <see cref="SearchIndexClient"/>.
+    /// Conditionally registers an Azure AI Search <see cref="SearchIndexClient"/> used at startup
+    /// to ensure the Lean/Kaizen index exists. RAG itself is performed server-side by Foundry,
+    /// so no retriever or function tool is registered here.
     /// </summary>
-    /// <remarks>
-    /// When <see cref="Settings.AzureSearchEndpoint"/> is not configured, no client is registered
-    /// and <c>GetService&lt;SearchIndexClient&gt;()</c> in <c>Program.cs</c> returns <c>null</c>,
-    /// causing the index-creation step to be skipped gracefully.
-    /// </remarks>
     private static IServiceCollection AddSearchServices(this IServiceCollection services, Settings settings)
     {
-        // Skip registration entirely when the search endpoint isn't configured — the app runs without search.
         if (settings.AzureSearchEndpoint is null)
         {
             return services;
         }
 
-        // Use Settings.CreateAzureCredential() so authentication (DefaultAzureCredential or otherwise)
-        // stays consistent with the rest of the Azure SDK clients in the app.
         services.AddSingleton(_ => new SearchIndexClient(
             settings.AzureSearchEndpoint,
             settings.CreateAzureCredential()));
-
-        // LeanSearchRetriever additionally needs an Azure OpenAI endpoint to embed user queries.
-        // Skip retriever registration (tool-call RAG disabled) when not configured.
-        if (settings.AzureOpenAIEndpoint is not null)
-        {
-            services.AddSingleton(sp =>
-            {
-                var credential = settings.CreateAzureCredential();
-                var aoaiClient = new AzureOpenAIClient(settings.AzureOpenAIEndpoint, credential);
-                var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger<LeanSearchRetriever>();
-                return new LeanSearchRetriever(
-                    settings.AzureSearchEndpoint,
-                    aoaiClient,
-                    settings.MemoryEmbeddingModel,
-                    credential,
-                    logger);
-            });
-        }
 
         return services;
     }
