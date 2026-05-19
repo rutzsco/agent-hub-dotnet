@@ -59,6 +59,7 @@ public class Settings
     public string CosmosMemoryAuditContainerName { get; init; } = "memory-audit";
     /// <summary>Azure AI Search endpoint; when null, search index registration is skipped.</summary>
     public Uri? AzureSearchEndpoint { get; init; }
+    public int AzureSearchTopK { get; init; } = 5;
 
     /// <summary>
     /// Reads configuration from the <c>AgentHub</c> section (with env-var fallbacks) and builds a populated <see cref="Settings"/>.
@@ -137,11 +138,18 @@ public class Settings
             ?? configuration["COSMOS_MEMORY_AUDIT_CONTAINER_NAME"]
             ?? "memory-audit";
 
-        var azureSearchEndpointValue = agentHubSection["AzureSearchEndpoint"]
+        var azureSearchEndpointValue = agentHubSection.GetSection("AzureSearch")["Endpoint"]
+            ?? agentHubSection["AzureSearchEndpoint"]
             ?? configuration["AZURE_SEARCH_ENDPOINT"];
         Uri? azureSearchEndpoint = string.IsNullOrWhiteSpace(azureSearchEndpointValue)
             ? null
             : new Uri(azureSearchEndpointValue);
+
+        var azureSearchTopKValue = agentHubSection.GetSection("AzureSearch")["TopK"]
+            ?? configuration["AZURE_SEARCH_TOP_K"];
+        var azureSearchTopK = int.TryParse(azureSearchTopKValue, out var parsedTopK) && parsedTopK > 0
+            ? parsedTopK
+            : 5;
 
         return new Settings
         {
@@ -157,7 +165,8 @@ public class Settings
             CosmosDatabaseName = cosmosDatabaseName,
             CosmosConversationContainerName = cosmosConversationContainerName,
             CosmosMemoryAuditContainerName = cosmosMemoryAuditContainerName,
-            AzureSearchEndpoint = azureSearchEndpoint
+            AzureSearchEndpoint = azureSearchEndpoint,
+            AzureSearchTopK = azureSearchTopK
         };
     }
 }
