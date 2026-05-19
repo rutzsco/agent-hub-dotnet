@@ -18,11 +18,13 @@ public sealed class PromptValidationSkill : ISkill<PromptValidationInput, Prompt
     private readonly IReadOnlyList<ValidationRule> _rules;
     private readonly ILogger<PromptValidationSkill> _logger;
 
+    /// <summary>Constructs the skill with the default rule set from <see cref="ValidationRules.DefaultRules"/>.</summary>
     public PromptValidationSkill(ILogger<PromptValidationSkill> logger)
         : this(ValidationRules.DefaultRules, logger)
     {
     }
 
+    /// <summary>Constructs the skill with a custom rule set (primarily for tests or feature flags).</summary>
     public PromptValidationSkill(
         IReadOnlyList<ValidationRule> rules,
         ILogger<PromptValidationSkill> logger)
@@ -31,6 +33,7 @@ public sealed class PromptValidationSkill : ISkill<PromptValidationInput, Prompt
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
+    /// <inheritdoc />
     public Task<PromptValidationResult> ExecuteAsync(
         PromptValidationInput input,
         CancellationToken cancellationToken = default)

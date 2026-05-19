@@ -4,12 +4,18 @@ using Microsoft.Extensions.Logging;
 
 namespace AgentHub.API.services.session;
 
+/// <summary>
+/// Default <see cref="IConversationSessionManager"/>. Keeps live agent sessions in a process-local
+/// dictionary and delegates durable history to <see cref="IConversationHistoryRepository"/>.
+/// </summary>
 public sealed class ConversationSessionManager : IConversationSessionManager
 {
     private readonly IConversationHistoryRepository _historyRepository;
     private readonly ILogger<ConversationSessionManager> _logger;
+    // Object-typed because each agent flavor returns a different session shape (AgentSession, ChatClientAgentSession, etc.).
     private readonly ConcurrentDictionary<Guid, object> _sessions = new();
 
+    /// <summary>Creates a session manager backed by the supplied history repository.</summary>
     public ConversationSessionManager(
         IConversationHistoryRepository historyRepository,
         ILogger<ConversationSessionManager> logger)
@@ -18,6 +24,7 @@ public sealed class ConversationSessionManager : IConversationSessionManager
         _logger = logger;
     }
 
+    /// <inheritdoc />
     public async Task<ConversationSessionContext> GetOrCreateSessionAsync(
         Guid? conversationId,
         Func<CancellationToken, Task<object>> createSession,
@@ -69,6 +76,7 @@ public sealed class ConversationSessionManager : IConversationSessionManager
             requiresHistoryReplay);
     }
 
+    /// <inheritdoc />
     public async Task AppendTurnAsync(
         Guid conversationId,
         string userMessage,
@@ -81,6 +89,7 @@ public sealed class ConversationSessionManager : IConversationSessionManager
         await _historyRepository.AppendMessageAsync(conversationId, "assistant", assistantMessage, now, cancellationToken);
     }
 
+    /// <inheritdoc />
     public Task SaveServiceManagedConversationAsync(
         Guid conversationId,
         string serviceConversationId,
@@ -94,6 +103,7 @@ public sealed class ConversationSessionManager : IConversationSessionManager
         return Task.CompletedTask;
     }
 
+    /// <inheritdoc />
     public Task<IReadOnlyList<ConversationMessage>> GetHistoryAsync(
         Guid conversationId,
         CancellationToken cancellationToken = default)
