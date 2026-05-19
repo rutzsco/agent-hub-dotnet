@@ -4,6 +4,7 @@ using AgentHub.API.services.search;
 using AgentHub.API.services.session;
 using AgentHub.API.Services.Memory;
 using AgentHub.API.Services.Skills.Validation;
+using Azure.AI.OpenAI;
 using Azure.Search.Documents.Indexes;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Foundry;
@@ -162,6 +163,24 @@ public static class AgentHubServiceCollectionExtensions
         services.AddSingleton(_ => new SearchIndexClient(
             settings.AzureSearchEndpoint,
             settings.CreateAzureCredential()));
+
+        // LeanSearchRetriever additionally needs an Azure OpenAI endpoint to embed user queries.
+        // Skip retriever registration (tool-call RAG disabled) when not configured.
+        if (settings.AzureOpenAIEndpoint is not null)
+        {
+            services.AddSingleton(sp =>
+            {
+                var credential = settings.CreateAzureCredential();
+                var aoaiClient = new AzureOpenAIClient(settings.AzureOpenAIEndpoint, credential);
+                var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger<LeanSearchRetriever>();
+                return new LeanSearchRetriever(
+                    settings.AzureSearchEndpoint,
+                    aoaiClient,
+                    settings.MemoryEmbeddingModel,
+                    credential,
+                    logger);
+            });
+        }
 
         return services;
     }

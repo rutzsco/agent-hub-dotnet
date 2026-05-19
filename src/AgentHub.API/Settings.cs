@@ -62,6 +62,13 @@ public class Settings
     public int AzureSearchTopK { get; init; } = 5;
 
     /// <summary>
+    /// When true, the client-side <c>LeanKnowledgeTool</c> is NOT registered on the agent.
+    /// Use this to demo a Foundry agent that has the Azure AI Search knowledge source
+    /// attached server-side (configured in the Foundry portal). Default: false (client-side tool).
+    /// </summary>
+    public bool UseServerSideSearchTool { get; init; }
+
+    /// <summary>
     /// Reads configuration from the <c>AgentHub</c> section (with env-var fallbacks) and builds a populated <see cref="Settings"/>.
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown when <see cref="AzureAIProjectEndpoint"/> is not configured.</exception>
@@ -151,6 +158,10 @@ public class Settings
             ? parsedTopK
             : 5;
 
+        var useServerSideSearchToolValue = agentHubSection.GetSection("AzureSearch")["UseServerSideTool"]
+            ?? configuration["AZURE_SEARCH_USE_SERVER_SIDE_TOOL"];
+        var useServerSideSearchTool = bool.TryParse(useServerSideSearchToolValue, out var parsedFlag) && parsedFlag;
+
         return new Settings
         {
             AzureAIProjectEndpoint = new Uri(endpoint),
@@ -166,7 +177,8 @@ public class Settings
             CosmosConversationContainerName = cosmosConversationContainerName,
             CosmosMemoryAuditContainerName = cosmosMemoryAuditContainerName,
             AzureSearchEndpoint = azureSearchEndpoint,
-            AzureSearchTopK = azureSearchTopK
+            AzureSearchTopK = azureSearchTopK,
+            UseServerSideSearchTool = useServerSideSearchTool
         };
     }
 }
