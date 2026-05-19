@@ -16,6 +16,8 @@ namespace AgentHub.API.Agents;
 /// </summary>
 public static class DemoAzureOpenAIAgent
 {
+    private const string ApimSubscriptionKeyHeaderName = "Ocp-Apim-Subscription-Key";
+
     /// <summary>
     /// Builds an <see cref="AIAgent"/> backed by Azure OpenAI chat completions.
     /// </summary>
@@ -31,6 +33,31 @@ public static class DemoAzureOpenAIAgent
             .AsAIAgent(
                 instructions: "You are a friendly assistant. Keep your answers brief.",
                 name: "demo-basic-aoai-agent");
+    }
+
+    private static AzureOpenAIClient CreateAzureOpenAIClient(Settings settings, Uri endpoint)
+    {
+        var apimSubscriptionKey = settings.ApimSubscriptionKey;
+        var keyToUse = string.IsNullOrWhiteSpace(settings.AzureAIApiKey)
+            ? apimSubscriptionKey
+            : settings.AzureAIApiKey;
+
+        if (string.IsNullOrWhiteSpace(keyToUse))
+        {
+            return new AzureOpenAIClient(endpoint, new DefaultAzureCredential());
+        }
+
+        if (string.IsNullOrWhiteSpace(apimSubscriptionKey))
+        {
+            return new AzureOpenAIClient(endpoint, new AzureKeyCredential(keyToUse));
+        }
+
+        var options = new AzureOpenAIClientOptions();
+        options.AddPolicy(
+            new ApimSubscriptionKeyPolicy(apimSubscriptionKey),
+            PipelinePosition.PerCall);
+
+        return new AzureOpenAIClient(endpoint, new AzureKeyCredential(keyToUse), options);
     }
 
     /// <summary>

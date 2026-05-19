@@ -38,7 +38,7 @@ if (searchIndexClient is not null)
 {
     try
     {
-        await LeanSearchIndex.EnsureCreatedAsync(searchIndexClient);
+        await LeanSearchIndex.EnsureCreatedAsync(searchIndexClient, settings);
         startupLogger.LogInformation("Azure AI Search index '{IndexName}' ensured.", LeanSearchIndex.IndexName);
     }
     catch (Exception ex)

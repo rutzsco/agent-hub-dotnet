@@ -13,15 +13,53 @@ public static class LeanSearchIndex
     public const string IndexName = "lean-kaizen-proto";
 
     // Match the embedding model dimensions (text-embedding-3-small = 1536).
-    private const int EmbeddingDimensions = 1536;
     private const string VectorProfileName = "hnsw-cosine";
     private const string VectorAlgorithmName = "hnsw-default";
+    private const string VectorizerName = "aoai-embed-small";
 
     /// <summary>
     /// Idempotently creates (or updates) the index schema. Safe to call on every app startup.
     /// </summary>
-    public static async Task EnsureCreatedAsync(SearchIndexClient client, CancellationToken ct = default)
+    /// <remarks>
+    /// When <paramref name="settings"/> exposes an Azure OpenAI endpoint, the index is configured
+    /// with an <c>AzureOpenAIVectorizer</c> bound to <see cref="Settings.AzureSearchEmbeddingDeployment"/>.
+    /// This lets clients (e.g., the Foundry server-side AI Search tool) issue plain-text vector
+    /// queries — the index embeds them server-side. Without it, callers must pre-embed queries
+    /// (the path used by <c>LeanSearchRetriever</c>).
+    /// </remarks>
+    public static async Task EnsureCreatedAsync(SearchIndexClient client, Settings settings, CancellationToken ct = default)
     {
+        var vectorSearch = new VectorSearch
+        {
+            Algorithms = { new HnswAlgorithmConfiguration(VectorAlgorithmName) }
+        };
+
+        // Attach an Azure OpenAI vectorizer only when an AOAI endpoint is configured.
+        // The Search service authenticates to AOAI via its own managed identity, so grant it
+        // the 'Cognitive Services OpenAI User' role on the AOAI resource for this to work.
+        if (settings.AzureOpenAIEndpoint is not null)
+        {
+            vectorSearch.Vectorizers.Add(new AzureOpenAIVectorizer(VectorizerName)
+            {
+                Parameters = new AzureOpenAIVectorizerParameters
+                {
+                    ResourceUri = settings.AzureOpenAIEndpoint,
+                    DeploymentName = settings.AzureSearchEmbeddingDeployment,
+                    ModelName = settings.AzureSearchEmbeddingModel
+                }
+            });
+
+            vectorSearch.Profiles.Add(new VectorSearchProfile(VectorProfileName, VectorAlgorithmName)
+            {
+                VectorizerName = VectorizerName
+            });
+        }
+        else
+        {
+            // No vectorizer — pre-embedded query vectors required at query time.
+            vectorSearch.Profiles.Add(new VectorSearchProfile(VectorProfileName, VectorAlgorithmName));
+        }
+
         var index = new SearchIndex(IndexName)
         {
             Fields =
@@ -31,7 +69,7 @@ public static class LeanSearchIndex
 
                 new SearchableField("content") { AnalyzerName = LexicalAnalyzerName.EnMicrosoft },
 
-                new VectorSearchField("contentVector", EmbeddingDimensions, VectorProfileName),
+                new VectorSearchField("contentVector", settings.AzureSearchEmbeddingDimensions, VectorProfileName),
 
                 // Lean domain
                 new SimpleField("artifactType", SearchFieldDataType.String) { IsFilterable = true, IsFacetable = true },
@@ -44,11 +82,7 @@ public static class LeanSearchIndex
                 // Freshness
                 new SimpleField("updatedAt", SearchFieldDataType.DateTimeOffset) { IsFilterable = true, IsSortable = true }
             },
-            VectorSearch = new VectorSearch
-            {
-                Profiles  = { new VectorSearchProfile(VectorProfileName, VectorAlgorithmName) },
-                Algorithms = { new HnswAlgorithmConfiguration(VectorAlgorithmName) }
-            }
+            VectorSearch = vectorSearch
         };
 
         await client.CreateOrUpdateIndexAsync(index, cancellationToken: ct).ConfigureAwait(false);

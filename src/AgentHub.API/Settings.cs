@@ -62,6 +62,9 @@ public class Settings
     /// <summary>Azure AI Search endpoint; when null, search index registration is skipped.</summary>
     public Uri? AzureSearchEndpoint { get; init; }
     public int AzureSearchTopK { get; init; } = 5;
+    public string AzureSearchEmbeddingDeployment { get; init; } = "text-embedding-3-small";
+    public string AzureSearchEmbeddingModel { get; init; } = "text-embedding-3-small";
+    public int AzureSearchEmbeddingDimensions { get; init; } = 1536;
 
     /// <summary>
     /// When true, the client-side <c>LeanKnowledgeTool</c> is NOT registered on the agent.
@@ -180,6 +183,18 @@ public class Settings
             ?? configuration["AZURE_SEARCH_USE_SERVER_SIDE_TOOL"];
         var useServerSideSearchTool = bool.TryParse(useServerSideSearchToolValue, out var parsedFlag) && parsedFlag;
 
+        var azureSearchEmbeddingDeployment = agentHubSection.GetSection("AzureSearch")["EmbeddingDeployment"]
+            ?? configuration["AZURE_SEARCH_EMBEDDING_DEPLOYMENT"]
+            ?? "text-embedding-3-small";
+        var azureSearchEmbeddingModel = agentHubSection.GetSection("AzureSearch")["EmbeddingModel"]
+            ?? configuration["AZURE_SEARCH_EMBEDDING_MODEL"]
+            ?? "text-embedding-3-small";
+        var azureSearchEmbeddingDimensionsValue = agentHubSection.GetSection("AzureSearch")["EmbeddingDimensions"]
+            ?? configuration["AZURE_SEARCH_EMBEDDING_DIMENSIONS"];
+        var azureSearchEmbeddingDimensions = int.TryParse(azureSearchEmbeddingDimensionsValue, out var parsedDims) && parsedDims > 0
+            ? parsedDims
+            : 1536;
+
         return new Settings
         {
             AzureAIProjectEndpoint = endpoint is null ? null : new Uri(endpoint),
@@ -198,7 +213,10 @@ public class Settings
             CosmosMemoryAuditContainerName = cosmosMemoryAuditContainerName,
             AzureSearchEndpoint = azureSearchEndpoint,
             AzureSearchTopK = azureSearchTopK,
-            UseServerSideSearchTool = useServerSideSearchTool
+            UseServerSideSearchTool = useServerSideSearchTool,
+            AzureSearchEmbeddingDeployment = azureSearchEmbeddingDeployment,
+            AzureSearchEmbeddingModel = azureSearchEmbeddingModel,
+            AzureSearchEmbeddingDimensions = azureSearchEmbeddingDimensions
         };
     }
 
