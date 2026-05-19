@@ -1,0 +1,15 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build AgentHub API",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/src/AgentHub.API/AgentHub.API.csproj"
+      ],
+      "problemMatcher": "$msCompile"
+    }
+  ]
+}

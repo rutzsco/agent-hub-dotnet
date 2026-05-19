@@ -20,6 +20,8 @@ public class Settings
     public Uri? AzureOpenAIEndpoint { get; init; }
     /// <summary>Model deployment name used for chat completions (must exist in the Foundry project).</summary>
     public string AzureAIModelDeploymentName { get; init; } = "gpt-4o-mini";
+    public string? AzureAIApiKey { get; init; }
+    public string? ApimSubscriptionKey { get; init; }
     /// <summary>Optional override for the Foundry agent name; falls back to per-agent defaults.</summary>
     public string? FoundryAgentName { get; init; }
     /// <summary>Optional Entra tenant id pinned across all credential flows.</summary>
@@ -76,26 +78,27 @@ public class Settings
     {
         var agentHubSection = configuration.GetSection("AgentHub");
 
-        var endpoint = agentHubSection["AzureAIProjectEndpoint"]
-            ?? configuration["AZURE_AI_PROJECT_ENDPOINT"]
-            ?? throw new InvalidOperationException(
-                "Azure AI project endpoint is not configured. Set AgentHub:AzureAIProjectEndpoint or AZURE_AI_PROJECT_ENDPOINT.");
+        var endpoint = GetOptionalValue(
+            agentHubSection["AzureAIProjectEndpoint"],
+            configuration["AZURE_AI_PROJECT_ENDPOINT"]);
 
-        var modelDeploymentName = agentHubSection["AzureAIModelDeploymentName"]
-            ?? configuration["AZURE_AI_MODEL_DEPLOYMENT_NAME"]
+        var modelDeploymentName = GetOptionalValue(
+            agentHubSection["AzureAIModelDeploymentName"],
+            configuration["AZURE_AI_MODEL_DEPLOYMENT_NAME"])
             ?? "gpt-4o-mini";
 
-        var azureOpenAIEndpointValue = agentHubSection["AzureOpenAIEndpoint"]
-            ?? configuration["AZURE_OPENAI_ENDPOINT"];
+        var azureOpenAIEndpoint = GetOptionalValue(
+            agentHubSection["AzureOpenAIEndpoint"],
+            configuration["AZURE_OPENAI_ENDPOINT"]);
 
-        Uri? azureOpenAIEndpoint = null;
-        if (!string.IsNullOrWhiteSpace(azureOpenAIEndpointValue))
-        {
-            azureOpenAIEndpoint = new Uri(azureOpenAIEndpointValue);
-        }
+        var azureAIApiKey = GetOptionalValue(
+            agentHubSection["AzureAIApiKey"],
+            configuration["AZURE_AI_API_KEY"],
+            configuration["AZURE_OPENAI_API_KEY"]);
 
-        var foundryAgentName = agentHubSection["FoundryAgentName"]
-            ?? configuration["AZURE_AI_FOUNDRY_AGENT_NAME"];
+        var apimSubscriptionKey = GetOptionalValue(
+            agentHubSection["ApimSubscriptionKey"],
+            configuration["APIM_SUBSCRIPTION_KEY"]);
 
         var azureTenantId = agentHubSection["AzureTenantId"]
             ?? configuration["AZURE_TENANT_ID"];
@@ -112,6 +115,7 @@ public class Settings
             }
             else
             {
+
                 var lines = instructionsSection.GetChildren()
                     .Select(c => c.Value ?? string.Empty)
                     .ToArray();
@@ -123,26 +127,40 @@ public class Settings
         }
         memoryAgentInstructions ??= configuration["AZURE_AI_MEMORY_AGENT_INSTRUCTIONS"];
 
-        var memoryStoreName = agentHubSection["MemoryStoreName"]
-            ?? configuration["AZURE_AI_MEMORY_STORE_NAME"]
+        //var memoryStoreName = agentHubSection["MemoryStoreName"]
+        //    ?? configuration["AZURE_AI_MEMORY_STORE_NAME"];
+        var foundryAgentName = GetOptionalValue(
+            agentHubSection["FoundryAgentName"],
+            configuration["AZURE_AI_FOUNDRY_AGENT_NAME"]);
+
+        var memoryStoreName = GetOptionalValue(
+            agentHubSection["MemoryStoreName"],
+            configuration["AZURE_AI_MEMORY_STORE_NAME"])
             ?? "agent-hub-memory";
 
-        var memoryEmbeddingModel = agentHubSection["MemoryEmbeddingModel"]
-            ?? configuration["AZURE_AI_MEMORY_EMBEDDING_MODEL"]
+        var memoryEmbeddingModel = GetOptionalValue(
+            agentHubSection["MemoryEmbeddingModel"],
+            configuration["AZURE_AI_MEMORY_EMBEDDING_MODEL"])
             ?? "text-embedding-3-small";
 
-        var cosmosAccountEndpoint = agentHubSection.GetSection("Cosmos")["AccountEndpoint"]
-            ?? configuration["COSMOS_ACCOUNT_ENDPOINT"];
+        var cosmosSection = agentHubSection.GetSection("Cosmos");
 
-        var cosmosDatabaseName = agentHubSection.GetSection("Cosmos")["DatabaseName"]
-            ?? configuration["COSMOS_DATABASE_NAME"];
+        var cosmosAccountEndpoint = GetOptionalValue(
+            cosmosSection["AccountEndpoint"],
+            configuration["COSMOS_ACCOUNT_ENDPOINT"]);
 
-        var cosmosConversationContainerName = agentHubSection.GetSection("Cosmos")["ConversationContainerName"]
-            ?? configuration["COSMOS_CONVERSATION_CONTAINER_NAME"]
+        var cosmosDatabaseName = GetOptionalValue(
+            cosmosSection["DatabaseName"],
+            configuration["COSMOS_DATABASE_NAME"]);
+
+        var cosmosConversationContainerName = GetOptionalValue(
+            cosmosSection["ConversationContainerName"],
+            configuration["COSMOS_CONVERSATION_CONTAINER_NAME"])
             ?? "conversation-messages";
 
-        var cosmosMemoryAuditContainerName = agentHubSection.GetSection("Cosmos")["MemoryAuditContainerName"]
-            ?? configuration["COSMOS_MEMORY_AUDIT_CONTAINER_NAME"]
+        var cosmosMemoryAuditContainerName = GetOptionalValue(
+            cosmosSection["MemoryAuditContainerName"],
+            configuration["COSMOS_MEMORY_AUDIT_CONTAINER_NAME"])
             ?? "memory-audit";
 
         var azureSearchEndpointValue = agentHubSection.GetSection("AzureSearch")["Endpoint"]
@@ -164,9 +182,11 @@ public class Settings
 
         return new Settings
         {
-            AzureAIProjectEndpoint = new Uri(endpoint),
-            AzureOpenAIEndpoint = azureOpenAIEndpoint,
+            AzureAIProjectEndpoint = endpoint is null ? null : new Uri(endpoint),
+            AzureOpenAIEndpoint = azureOpenAIEndpoint is null ? null : new Uri(azureOpenAIEndpoint),
             AzureAIModelDeploymentName = modelDeploymentName,
+            AzureAIApiKey = azureAIApiKey,
+            ApimSubscriptionKey = apimSubscriptionKey,
             FoundryAgentName = foundryAgentName,
             AzureTenantId = azureTenantId,
             MemoryAgentInstructions = memoryAgentInstructions,
@@ -180,5 +200,25 @@ public class Settings
             AzureSearchTopK = azureSearchTopK,
             UseServerSideSearchTool = useServerSideSearchTool
         };
+    }
+
+    private static string? GetOptionalValue(params string?[] values)
+    {
+        return values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+    }
+
+    public Uri RequireAzureAIProjectEndpoint()
+    {
+        return AzureAIProjectEndpoint
+            ?? throw new InvalidOperationException(
+                "Foundry agents are not configured. Set AgentHub:AzureAIProjectEndpoint or AZURE_AI_PROJECT_ENDPOINT to enable Foundry-backed endpoints.");
+    }
+
+    public Uri RequireAzureOpenAIEndpoint()
+    {
+        return AzureOpenAIEndpoint
+            ?? AzureAIProjectEndpoint
+            ?? throw new InvalidOperationException(
+                "Azure OpenAI endpoint is not configured. Set AgentHub:AzureOpenAIEndpoint, AZURE_OPENAI_ENDPOINT, AgentHub:AzureAIProjectEndpoint, or AZURE_AI_PROJECT_ENDPOINT.");
     }
 }

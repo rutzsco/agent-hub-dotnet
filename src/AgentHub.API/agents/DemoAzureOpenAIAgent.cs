@@ -1,9 +1,11 @@
+using Azure;
 using Azure.AI.OpenAI;
 using Azure.Identity;
 using AgentHub.API.services.conversations;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using AgentHub.API.services.session;
+using System.ClientModel.Primitives;
 
 namespace AgentHub.API.Agents;
 
@@ -20,13 +22,10 @@ public static class DemoAzureOpenAIAgent
     /// <exception cref="InvalidOperationException">Thrown when <see cref="Settings.AzureOpenAIEndpoint"/> is not configured.</exception>
     public static AIAgent Create(Settings settings)
     {
-        if (settings.AzureOpenAIEndpoint is null)
-        {
-            throw new InvalidOperationException(
-                "Demo AOAI agent requires a dedicated Azure OpenAI endpoint. Set AgentHub:AzureOpenAIEndpoint or AZURE_OPENAI_ENDPOINT, and ensure your signed-in identity has the 'Cognitive Services OpenAI User' role on that Azure OpenAI resource.");
-        }
+        var endpoint = settings.RequireAzureOpenAIEndpoint();
+        var client = CreateAzureOpenAIClient(settings, endpoint);
 
-        return new AzureOpenAIClient(settings.AzureOpenAIEndpoint, settings.CreateAzureCredential())
+        return client
             .GetChatClient(settings.AzureAIModelDeploymentName)
             .AsIChatClient()
             .AsAIAgent(
@@ -121,6 +120,24 @@ public static class DemoAzureOpenAIAgent
         };
 
         return new ChatMessage(role, message.Content);
+    }
+
+    private sealed class ApimSubscriptionKeyPolicy(string subscriptionKey) : PipelinePolicy
+    {
+        public override void Process(PipelineMessage message, IReadOnlyList<PipelinePolicy> pipeline, int currentIndex)
+        {
+            message.Request.Headers.Set(ApimSubscriptionKeyHeaderName, subscriptionKey);
+            ProcessNext(message, pipeline, currentIndex);
+        }
+
+        public override async ValueTask ProcessAsync(
+            PipelineMessage message,
+            IReadOnlyList<PipelinePolicy> pipeline,
+            int currentIndex)
+        {
+            message.Request.Headers.Set(ApimSubscriptionKeyHeaderName, subscriptionKey);
+            await ProcessNextAsync(message, pipeline, currentIndex);
+        }
     }
 }
 
