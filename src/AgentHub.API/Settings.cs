@@ -72,6 +72,7 @@ public class Settings
             }
             else
             {
+
                 var lines = instructionsSection.GetChildren()
                     .Select(c => c.Value ?? string.Empty)
                     .ToArray();
@@ -83,8 +84,8 @@ public class Settings
         }
         memoryAgentInstructions ??= configuration["AZURE_AI_MEMORY_AGENT_INSTRUCTIONS"];
 
-        var memoryStoreName = agentHubSection["MemoryStoreName"]
-            ?? configuration["AZURE_AI_MEMORY_STORE_NAME"]
+        //var memoryStoreName = agentHubSection["MemoryStoreName"]
+        //    ?? configuration["AZURE_AI_MEMORY_STORE_NAME"];
         var foundryAgentName = GetOptionalValue(
             agentHubSection["FoundryAgentName"],
             configuration["AZURE_AI_FOUNDRY_AGENT_NAME"]);

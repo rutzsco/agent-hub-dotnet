@@ -98,7 +98,7 @@ public static partial class AgentRoutes
 #pragma warning restore OPENAI001
 
         app.MapPost("/agents/foundryMemoryAgent", async (
-            FoundryMemoryContext memoryContext,
+            //FoundryMemoryContext memoryContext,
             PromptValidationSkill validationSkill,
             IServiceProvider serviceProvider,
             MemoryAgentRequest request,
