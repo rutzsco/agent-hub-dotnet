@@ -4,8 +4,13 @@ using Microsoft.Extensions.Logging;
 
 namespace AgentHub.API.Services.Memory;
 
+/// <summary>
+/// Cosmos DB-backed <see cref="IMemoryAuditRepository"/> writing one document per memory-deletion event,
+/// partitioned by <c>/userId</c> so a user's entire audit trail lives in a single logical partition.
+/// </summary>
 public sealed class CosmosMemoryAuditRepository : CosmosRepositoryBase, IMemoryAuditRepository
 {
+    /// <summary>Creates a repository scoped to the audit container described by <paramref name="options"/>.</summary>
     public CosmosMemoryAuditRepository(
         CosmosOptions options,
         ILogger<CosmosMemoryAuditRepository> logger)
@@ -13,6 +18,7 @@ public sealed class CosmosMemoryAuditRepository : CosmosRepositoryBase, IMemoryA
     {
     }
 
+    /// <inheritdoc />
     public async Task LogMemoryDeletionAsync(
         string userId,
         string memoryStoreName,
@@ -43,6 +49,7 @@ public sealed class CosmosMemoryAuditRepository : CosmosRepositoryBase, IMemoryA
             userId, memoryStoreName, doc.id, wasSuccessful);
     }
 
+    /// <inheritdoc />
     public async Task<IReadOnlyList<MemoryDeletionAuditEntry>> GetUserDeletionHistoryAsync(
         string userId,
         CancellationToken cancellationToken = default)

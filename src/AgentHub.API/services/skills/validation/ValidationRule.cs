@@ -7,7 +7,9 @@ namespace AgentHub.API.Services.Skills.Validation;
 /// </summary>
 public sealed class ValidationRule
 {
+    /// <summary>Human-readable rule identifier used in logs and failure responses.</summary>
     public required string Name { get; init; }
+    /// <summary>Returns <c>(true, null)</c> when the prompt passes; otherwise <c>(false, errorMessage)</c>.</summary>
     public required Func<string, (bool IsValid, string? ErrorMessage)> Validator { get; init; }
 }
 
@@ -49,6 +51,7 @@ public static class ValidationRules
         @"(.{3,})\1{10,}",
         RegexOptions.Compiled);
 
+    /// <summary>Rejects common prompt-injection attempts (e.g., "ignore previous instructions").</summary>
     public static readonly ValidationRule PromptInjection = new()
     {
         Name = "PromptInjection",
@@ -62,6 +65,7 @@ public static class ValidationRules
         }
     };
 
+    /// <summary>Rejects jailbreak-style attempts (DAN mode, "do anything now", etc.).</summary>
     public static readonly ValidationRule JailbreakAttempt = new()
     {
         Name = "JailbreakAttempt",
@@ -75,6 +79,7 @@ public static class ValidationRules
         }
     };
 
+    /// <summary>Rejects messages that try to alter the agent's role or identity.</summary>
     public static readonly ValidationRule RoleManipulation = new()
     {
         Name = "RoleManipulation",
@@ -88,6 +93,7 @@ public static class ValidationRules
         }
     };
 
+    /// <summary>Rejects messages containing excessive repeated patterns (often DoS or jailbreak attempts).</summary>
     public static readonly ValidationRule ExcessiveRepetition = new()
     {
         Name = "ExcessiveRepetition",
@@ -101,6 +107,7 @@ public static class ValidationRules
         }
     };
 
+    /// <summary>Rejects messages containing disallowed control characters.</summary>
     public static readonly ValidationRule ValidCharacters = new()
     {
         Name = "ValidCharacters",
@@ -117,6 +124,7 @@ public static class ValidationRules
         }
     };
 
+    /// <summary>Rejects empty or whitespace-only messages.</summary>
     public static readonly ValidationRule MinimumLength = new()
     {
         Name = "MinimumLength",
@@ -135,6 +143,7 @@ public static class ValidationRules
         }
     };
 
+    /// <summary>Rejects messages exceeding the 4000-character limit enforced by the memory agent.</summary>
     public static readonly ValidationRule MaximumLength = new()
     {
         Name = "MaximumLength",
@@ -148,6 +157,7 @@ public static class ValidationRules
         }
     };
 
+    /// <summary>Ordered rule set applied by <see cref="PromptValidationSkill"/> on every request.</summary>
     public static IReadOnlyList<ValidationRule> DefaultRules => new[]
     {
         MinimumLength,

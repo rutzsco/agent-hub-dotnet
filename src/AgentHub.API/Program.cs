@@ -1,5 +1,7 @@
 using AgentHub.API;
 using AgentHub.API.Routes;
+using AgentHub.API.services.search;
+using Azure.Search.Documents.Indexes;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -30,6 +32,24 @@ startupLogger.LogInformation(
     settings.AzureAIProjectEndpoint,
     settings.AzureAIModelDeploymentName,
     settings.FoundryAgentName ?? AgentHub.API.Agents.FoundryDemoAgent.DefaultName);
+
+var searchIndexClient = app.Services.GetService<SearchIndexClient>();
+if (searchIndexClient is not null)
+{
+    try
+    {
+        await LeanSearchIndex.EnsureCreatedAsync(searchIndexClient);
+        startupLogger.LogInformation("Azure AI Search index '{IndexName}' ensured.", LeanSearchIndex.IndexName);
+    }
+    catch (Exception ex)
+    {
+        startupLogger.LogError(ex, "Failed to ensure Azure AI Search index '{IndexName}'.", LeanSearchIndex.IndexName);
+    }
+}
+else
+{
+    startupLogger.LogInformation("Azure AI Search not configured (AgentHub:AzureSearchEndpoint missing); skipping index creation.");
+}
 
 app.Use(async (context, next) =>
 {

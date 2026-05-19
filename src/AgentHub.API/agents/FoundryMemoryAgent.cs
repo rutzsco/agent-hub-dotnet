@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using AgentHub.API.services.search;
 using AgentHub.API.Services.Skills.Validation;
 using Azure.AI.Projects;
 using Azure.AI.Projects.Agents;
@@ -19,21 +20,70 @@ namespace AgentHub.API.Agents;
 #pragma warning disable OPENAI001
 
 /// <summary>
-/// Holds the Foundry memory agent and related clients.
-/// Registered as a singleton; the route handler injects this directly.
-/// No application-level session caching - Foundry manages short-term context
-/// via its thread model and long-term memory via FoundryMemoryProvider.
+/// Foundry-managed conversational agent with per-user long-term memory.
+///
+/// Memory model:
+/// - Short-term (per conversation): stored server-side as a Foundry thread
+///   (ChatClientAgentSession). We only carry the conversationId on the wire;
+///   prior turns are never replayed by the client.
+/// - Long-term (per user): stored server-side in a Foundry Memory Store
+///   (AIProjectMemoryStores) created/resolved at startup. Foundry owns
+///   embeddings, vector search, user profile, and chat summaries.
+///
+/// Session hydration:
+/// - New conversation (conversationId == null) -> Agent.CreateConversationSessionAsync
+///   creates a fresh Foundry thread; Foundry returns a new conversationId.
+/// - Follow-up (conversationId provided) -> BaseAgent.CreateSessionAsync(conversationId)
+///   resumes the existing thread. Foundry rehydrates context from its own state.
+///
+/// Long-term memory orchestration:
+/// - FoundryMemoryProvider is attached client-side via the AsAIAgent chatClient
+///   transform (AIContextProviderChatClient). The provider:
+///     1. Before each run: searches the memory store scoped to the current
+///        userId and injects relevant memories into the prompt.
+///     2. After each run: persists the new user/assistant turn back to the
+///        memory store under the same scope.
+/// - Per-user scoping is provided by setting an AsyncLocal&lt;string?&gt; _currentUserId
+///   for the duration of the request; the provider reads it via stateInitializer.
+/// - Our process never holds memory bytes; it only supplies the scope key and
+///   triggers retrieve/persist hooks.
+///
+/// System prompt:
+/// - Sourced from AgentHub:MemoryAgentInstructions in configuration; falls back
+///   to KaiCharterSystemPrompt constant.
+/// - Foundry bakes instructions at agent creation. To roll out a new prompt,
+///   bump AgentHub:FoundryAgentName so a fresh agent is provisioned.
+///
+/// Naming note:
+/// - IChatClient / "chatClient transform" refers to the Microsoft.Extensions.AI
+///   abstraction used for client-side middleware. It is NOT the Azure OpenAI
+///   /chat/completions REST endpoint. Foundry decides Chat Completions vs.
+///   Responses API server-side based on the model and tools attached.
+/// </summary>
+/// <summary>
+/// Bundle of Foundry handles required to drive the memory agent end-to-end:
+/// the <see cref="AIAgent"/> wrapper, the underlying <see cref="ChatClientAgent"/> (for session resumption),
+/// the memory store client, and the active store name.
 /// </summary>
 public sealed class FoundryMemoryContext
 {
+    /// <summary>The Foundry agent wrapper, wired with the <c>FoundryMemoryProvider</c> chat-client transform.</summary>
     public required FoundryAgent Agent { get; init; }
+    /// <summary>The underlying chat-client agent, used to resume existing Foundry threads by conversation id.</summary>
     public required ChatClientAgent BaseAgent { get; init; }
+    /// <summary>Client for direct Foundry memory store operations (search, delete).</summary>
     public required AIProjectMemoryStores MemoryClient { get; init; }
+    /// <summary>Name of the active Foundry memory store.</summary>
     public required string MemoryStoreName { get; init; }
 }
 
+/// <summary>
+/// Factory and message-processing helpers for the Foundry-managed memory agent.
+/// See the file-header comment on <see cref="FoundryMemoryContext"/> for the full memory model.
+/// </summary>
 public static class FoundryMemoryAgent
 {
+    /// <summary>Default Foundry agent name when no override is configured.</summary>
     public const string DefaultAgentName = "MemoryAgent";
     private static readonly Regex UserIdPattern = new(@"^[a-zA-Z0-9][a-zA-Z0-9._%+@\-]{0,127}$", RegexOptions.Compiled);
 
@@ -142,7 +192,7 @@ public static class FoundryMemoryAgent
         when the intent is field_help:
 
         **Tips for "<field label>"**
-        - 3 to 5 short, specific bullets.
+        - 1 to 3 short, specific bullets.
 
         **Suggested wording**
         > A single concrete example the user could paste into the field, tailored
@@ -208,7 +258,24 @@ public static class FoundryMemoryAgent
           past sessions, but never reveal another user's data.
         """;
 
+    /// <summary>
+    /// Initializes the Foundry memory agent: resolves/creates the memory store, attaches the memory provider
+    /// as a chat-client transform, and returns a <see cref="FoundryMemoryContext"/> for request-time use.
+    /// </summary>
     public static async Task<FoundryMemoryContext> CreateAsync(Settings settings, ILogger logger)
+    {
+        return await CreateAsync(settings, logger, retriever: null);
+    }
+
+    /// <summary>
+    /// Overload that additionally registers the <see cref="LeanKnowledgeTool"/> function tool
+    /// when a <paramref name="retriever"/> is supplied, enabling tool-call RAG over the
+    /// Lean/Kaizen Azure AI Search index.
+    /// </summary>
+    public static async Task<FoundryMemoryContext> CreateAsync(
+        Settings settings,
+        ILogger logger,
+        LeanSearchRetriever? retriever)
     {
         logger.LogInformation(
             "Initializing Foundry memory agent. Endpoint={Endpoint}, MemoryStore={MemoryStore}, EmbeddingModel={EmbeddingModel}",
@@ -238,10 +305,20 @@ public static class FoundryMemoryAgent
         logger.LogInformation("Foundry memory agent is ready. AgentName={AgentName}", record.Name);
 
         // Build server-side Foundry agent wrapper and attach FoundryMemoryProvider
-        // via chatClient transform.
+        // via chatClient transform. When a retriever is supplied, register the Lean
+        // knowledge tool so the model can call it for grounded answers (tool-call RAG).
+        var tools = retriever is null
+            ? Array.Empty<AITool>()
+            : new AITool[] { LeanKnowledgeTool.Create(retriever, settings.AzureSearchTopK) };
+
+        if (retriever is not null)
+        {
+            logger.LogInformation("Registering Lean knowledge tool for tool-call RAG. ToolName={ToolName}", LeanKnowledgeTool.ToolName);
+        }
+
         var agent = (FoundryAgent)client.AsAIAgent(
             record,
-            [],
+            tools,
             inner => CreateContextProviderChatClient(inner, memoryProvider),
             null);
 
@@ -256,6 +333,10 @@ public static class FoundryMemoryAgent
         };
     }
 
+    /// <summary>
+    /// Validates the request, runs the agent with per-user memory scoping, and returns the assistant reply.
+    /// Creates a new Foundry thread when <paramref name="conversationId"/> is null; resumes the existing thread otherwise.
+    /// </summary>
     public static async Task<MemoryAgentMessageResult> ProcessMessage(
         FoundryMemoryContext memoryContext,
         PromptValidationSkill validationSkill,

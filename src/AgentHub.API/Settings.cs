@@ -2,22 +2,44 @@ using Microsoft.Extensions.Configuration;
 
 namespace AgentHub.API;
 
+/// <summary>
+/// Immutable, strongly-typed view of AgentHub configuration.
+/// Bound once at startup via <see cref="Load"/> and registered as a DI singleton so
+/// downstream services depend on this type rather than on <see cref="IConfiguration"/>.
+/// </summary>
+/// <remarks>
+/// Every value supports two configuration sources for convenience:
+/// the hierarchical <c>AgentHub:*</c> section (preferred for appsettings.json) and
+/// flat <c>SCREAMING_SNAKE_CASE</c> environment variables (preferred for containers / CI).
+/// </remarks>
 public class Settings
 {
-    public Uri? AzureAIProjectEndpoint { get; init; }
+    /// <summary>Azure AI project endpoint used by Foundry clients.</summary>
+    public required Uri AzureAIProjectEndpoint { get; init; }
+    /// <summary>Optional dedicated Azure OpenAI endpoint for the demo AOAI agent.</summary>
     public Uri? AzureOpenAIEndpoint { get; init; }
+    /// <summary>Model deployment name used for chat completions (must exist in the Foundry project).</summary>
     public string AzureAIModelDeploymentName { get; init; } = "gpt-4o-mini";
     public string? AzureAIApiKey { get; init; }
     public string? ApimSubscriptionKey { get; init; }
+    /// <summary>Optional override for the Foundry agent name; falls back to per-agent defaults.</summary>
     public string? FoundryAgentName { get; init; }
+    /// <summary>Optional Entra tenant id pinned across all credential flows.</summary>
     public string? AzureTenantId { get; init; }
+    /// <summary>Optional override for the memory agent's system prompt.</summary>
     public string? MemoryAgentInstructions { get; init; }
 
+    /// <summary>
+    /// Builds a <see cref="Azure.Identity.DefaultAzureCredential"/> pinned to <see cref="AzureTenantId"/>
+    /// when configured. Centralized so every Azure SDK client in the app authenticates identically.
+    /// </summary>
     public Azure.Identity.DefaultAzureCredential CreateAzureCredential()
     {
         var options = new Azure.Identity.DefaultAzureCredentialOptions();
         if (!string.IsNullOrWhiteSpace(AzureTenantId))
         {
+            // Pin tenant across every credential source to avoid silent fallback to the wrong tenant
+            // when the developer is signed into multiple tenants (VS, Azure CLI, browser, etc.).
             options.TenantId = AzureTenantId;
             options.VisualStudioTenantId = AzureTenantId;
             options.SharedTokenCacheTenantId = AzureTenantId;
@@ -25,13 +47,33 @@ public class Settings
         }
         return new Azure.Identity.DefaultAzureCredential(options);
     }
+    /// <summary>Foundry memory store name (created on first run if missing).</summary>
     public string MemoryStoreName { get; init; } = "agent-hub-memory";
+    /// <summary>Embedding model used by the Foundry memory store.</summary>
     public string MemoryEmbeddingModel { get; init; } = "text-embedding-3-small";
+    /// <summary>Cosmos DB account endpoint; when null, conversation history falls back to in-memory.</summary>
     public string? CosmosAccountEndpoint { get; init; }
+    /// <summary>Cosmos DB database name (defaults to "agent-hub" if not specified).</summary>
     public string? CosmosDatabaseName { get; init; }
+    /// <summary>Cosmos container for persisted conversation messages.</summary>
     public string CosmosConversationContainerName { get; init; } = "conversation-messages";
+    /// <summary>Cosmos container for memory deletion audit entries.</summary>
     public string CosmosMemoryAuditContainerName { get; init; } = "memory-audit";
+    /// <summary>Azure AI Search endpoint; when null, search index registration is skipped.</summary>
+    public Uri? AzureSearchEndpoint { get; init; }
+    public int AzureSearchTopK { get; init; } = 5;
 
+    /// <summary>
+    /// When true, the client-side <c>LeanKnowledgeTool</c> is NOT registered on the agent.
+    /// Use this to demo a Foundry agent that has the Azure AI Search knowledge source
+    /// attached server-side (configured in the Foundry portal). Default: false (client-side tool).
+    /// </summary>
+    public bool UseServerSideSearchTool { get; init; }
+
+    /// <summary>
+    /// Reads configuration from the <c>AgentHub</c> section (with env-var fallbacks) and builds a populated <see cref="Settings"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when <see cref="AzureAIProjectEndpoint"/> is not configured.</exception>
     public static Settings Load(IConfiguration configuration)
     {
         var agentHubSection = configuration.GetSection("AgentHub");
@@ -61,7 +103,8 @@ public class Settings
         var azureTenantId = agentHubSection["AzureTenantId"]
             ?? configuration["AZURE_TENANT_ID"];
 
-        // MemoryAgentInstructions can be a single string or an array of strings (joined with newlines).
+        // MemoryAgentInstructions accepts either a single string OR a JSON array of lines.
+        // The array form keeps multi-line prompts readable in appsettings.json without escaped newlines.
         var instructionsSection = agentHubSection.GetSection("MemoryAgentInstructions");
         string? memoryAgentInstructions = null;
         if (instructionsSection.Exists())
@@ -120,6 +163,23 @@ public class Settings
             configuration["COSMOS_MEMORY_AUDIT_CONTAINER_NAME"])
             ?? "memory-audit";
 
+        var azureSearchEndpointValue = agentHubSection.GetSection("AzureSearch")["Endpoint"]
+            ?? agentHubSection["AzureSearchEndpoint"]
+            ?? configuration["AZURE_SEARCH_ENDPOINT"];
+        Uri? azureSearchEndpoint = string.IsNullOrWhiteSpace(azureSearchEndpointValue)
+            ? null
+            : new Uri(azureSearchEndpointValue);
+
+        var azureSearchTopKValue = agentHubSection.GetSection("AzureSearch")["TopK"]
+            ?? configuration["AZURE_SEARCH_TOP_K"];
+        var azureSearchTopK = int.TryParse(azureSearchTopKValue, out var parsedTopK) && parsedTopK > 0
+            ? parsedTopK
+            : 5;
+
+        var useServerSideSearchToolValue = agentHubSection.GetSection("AzureSearch")["UseServerSideTool"]
+            ?? configuration["AZURE_SEARCH_USE_SERVER_SIDE_TOOL"];
+        var useServerSideSearchTool = bool.TryParse(useServerSideSearchToolValue, out var parsedFlag) && parsedFlag;
+
         return new Settings
         {
             AzureAIProjectEndpoint = endpoint is null ? null : new Uri(endpoint),
@@ -135,7 +195,10 @@ public class Settings
             CosmosAccountEndpoint = cosmosAccountEndpoint,
             CosmosDatabaseName = cosmosDatabaseName,
             CosmosConversationContainerName = cosmosConversationContainerName,
-            CosmosMemoryAuditContainerName = cosmosMemoryAuditContainerName
+            CosmosMemoryAuditContainerName = cosmosMemoryAuditContainerName,
+            AzureSearchEndpoint = azureSearchEndpoint,
+            AzureSearchTopK = azureSearchTopK,
+            UseServerSideSearchTool = useServerSideSearchTool
         };
     }
 

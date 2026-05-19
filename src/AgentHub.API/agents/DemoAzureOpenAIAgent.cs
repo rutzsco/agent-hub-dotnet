@@ -9,10 +9,17 @@ using System.ClientModel.Primitives;
 
 namespace AgentHub.API.Agents;
 
+/// <summary>
+/// Factory and message-processing helpers for the "demo" agent backed directly by Azure OpenAI
+/// (no Foundry agent/thread orchestration). State is managed client-side via
+/// <see cref="IConversationSessionManager"/> and replayed history.
+/// </summary>
 public static class DemoAzureOpenAIAgent
 {
-    private const string ApimSubscriptionKeyHeaderName = "Ocp-Apim-Subscription-Key";
-
+    /// <summary>
+    /// Builds an <see cref="AIAgent"/> backed by Azure OpenAI chat completions.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when <see cref="Settings.AzureOpenAIEndpoint"/> is not configured.</exception>
     public static AIAgent Create(Settings settings)
     {
         var endpoint = settings.RequireAzureOpenAIEndpoint();
@@ -26,31 +33,9 @@ public static class DemoAzureOpenAIAgent
                 name: "demo-basic-aoai-agent");
     }
 
-    private static AzureOpenAIClient CreateAzureOpenAIClient(Settings settings, Uri endpoint)
-    {
-        var apimSubscriptionKey = settings.ApimSubscriptionKey;
-        var keyToUse = string.IsNullOrWhiteSpace(settings.AzureAIApiKey)
-            ? apimSubscriptionKey
-            : settings.AzureAIApiKey;
-
-        if (string.IsNullOrWhiteSpace(keyToUse))
-        {
-            return new AzureOpenAIClient(endpoint, new DefaultAzureCredential());
-        }
-
-        if (string.IsNullOrWhiteSpace(apimSubscriptionKey))
-        {
-            return new AzureOpenAIClient(endpoint, new AzureKeyCredential(keyToUse));
-        }
-
-        var options = new AzureOpenAIClientOptions();
-        options.AddPolicy(
-            new ApimSubscriptionKeyPolicy(apimSubscriptionKey),
-            PipelinePosition.PerCall);
-
-        return new AzureOpenAIClient(endpoint, new AzureKeyCredential(keyToUse), options);
-    }
-
+    /// <summary>
+    /// Validates input, runs the agent within a managed session, persists the turn, and returns the assistant reply.
+    /// </summary>
     public static async Task<AgentMessageResult> ProcessMessage(
         AIAgent agent,
         IConversationSessionManager sessionManager,
@@ -87,6 +72,9 @@ public static class DemoAzureOpenAIAgent
         return new AgentMessageResult(session.ConversationId, responseText);
     }
 
+    /// <summary>
+    /// Runs the agent, replaying persisted history into the session on the first turn after rehydration.
+    /// </summary>
     internal static Task<AgentResponse> RunWithConversationMemoryAsync(
         AIAgent agent,
         ConversationSessionContext session,
@@ -98,6 +86,7 @@ public static class DemoAzureOpenAIAgent
 
         if (!session.RequiresHistoryReplay)
         {
+            // Fast path: in-process session already holds the running transcript.
             return agent.RunAsync(
                 message,
                 agentSession,
@@ -109,6 +98,7 @@ public static class DemoAzureOpenAIAgent
             session.ConversationId,
             session.History.Count);
 
+        // Cold path (e.g., after process restart): replay history so the model sees full context.
         var messages = session.History
             .Select(ToChatMessage)
             .Append(new ChatMessage(ChatRole.User, message));

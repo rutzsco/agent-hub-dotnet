@@ -4,8 +4,13 @@ using Microsoft.Extensions.Logging;
 
 namespace AgentHub.API.services.conversations;
 
+/// <summary>
+/// Cosmos DB-backed <see cref="IConversationHistoryRepository"/>. Partition key is <c>/conversationId</c>
+/// so every conversation's messages live in a single logical partition for cheap point reads.
+/// </summary>
 public sealed class CosmosConversationHistoryRepository : CosmosRepositoryBase, IConversationHistoryRepository
 {
+    /// <summary>Creates a repository scoped to the conversation container described by <paramref name="options"/>.</summary>
     public CosmosConversationHistoryRepository(
         CosmosOptions options,
         ILogger<CosmosConversationHistoryRepository> logger)
@@ -13,6 +18,7 @@ public sealed class CosmosConversationHistoryRepository : CosmosRepositoryBase, 
     {
     }
 
+    /// <inheritdoc />
     public async Task<IReadOnlyList<ConversationMessage>> GetMessagesAsync(
         Guid conversationId,
         CancellationToken cancellationToken = default)
@@ -49,6 +55,7 @@ public sealed class CosmosConversationHistoryRepository : CosmosRepositoryBase, 
         return messages;
     }
 
+    /// <inheritdoc />
     public async Task AppendMessageAsync(
         Guid conversationId,
         string role,
