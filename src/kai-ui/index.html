@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KAI — Kaizen AI Coach</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --border: #334155;
+            --text: #e2e8f0;
+            --muted: #94a3b8;
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --tool-bg: #1a1a2e;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        header h1 {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        header .badge {
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            background: var(--primary);
+            color: white;
+        }
+
+        .container {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* Chat panel */
+        .chat-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .message {
+            max-width: 80%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            line-height: 1.5;
+            font-size: 0.9rem;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .message.user {
+            align-self: flex-end;
+            background: var(--primary);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.assistant {
+            align-self: flex-start;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-bottom-left-radius: 4px;
+        }
+
+        .message.assistant .content {
+            white-space: normal;
+        }
+
+        .message.assistant .content h1,
+        .message.assistant .content h2,
+        .message.assistant .content h3 {
+            margin-top: 12px;
+            margin-bottom: 6px;
+        }
+
+        .message.assistant .content ul,
+        .message.assistant .content ol {
+            padding-left: 20px;
+            margin: 8px 0;
+        }
+
+        .message.assistant .content code {
+            background: var(--bg);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.85em;
+        }
+
+        .tool-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.75rem;
+            padding: 3px 8px;
+            border-radius: 6px;
+            background: var(--tool-bg);
+            border: 1px solid var(--border);
+            margin: 4px 4px 4px 0;
+            color: var(--muted);
+        }
+
+        .tool-badge.active {
+            border-color: var(--warning);
+            color: var(--warning);
+        }
+
+        .tool-badge.done {
+            border-color: var(--success);
+            color: var(--success);
+        }
+
+        .tool-badge::before {
+            content: "🔧";
+            font-size: 0.7rem;
+        }
+
+        /* Input area */
+        .input-area {
+            padding: 16px 24px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 12px;
+        }
+
+        .input-area textarea {
+            flex: 1;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px 16px;
+            color: var(--text);
+            font-size: 0.9rem;
+            font-family: inherit;
+            resize: none;
+            min-height: 44px;
+            max-height: 120px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .input-area textarea:focus {
+            border-color: var(--primary);
+        }
+
+        .input-area button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            padding: 0 20px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .input-area button:hover {
+            background: var(--primary-hover);
+        }
+
+        .input-area button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Side panel */
+        .side-panel {
+            width: 320px;
+            border-left: 1px solid var(--border);
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .side-panel h2 {
+            font-size: 0.9rem;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .charter-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 0.85rem;
+        }
+
+        .charter-card .label {
+            color: var(--muted);
+            font-size: 0.75rem;
+            margin-bottom: 4px;
+        }
+
+        .charter-card .value {
+            color: var(--text);
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+            color: var(--muted);
+        }
+
+        .status-indicator .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+        }
+
+        .status-indicator .dot.disconnected {
+            background: #ef4444;
+        }
+
+        .quick-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .quick-actions button {
+            font-size: 0.75rem;
+            padding: 6px 10px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text);
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+
+        .quick-actions button:hover {
+            border-color: var(--primary);
+        }
+
+        @media (max-width: 768px) {
+            .side-panel { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>KAI</h1>
+        <span class="badge">Kaizen AI Coach</span>
+        <div style="flex:1"></div>
+        <div class="status-indicator">
+            <div class="dot" id="statusDot"></div>
+            <span id="statusText">Connected</span>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="chat-panel">
+            <div class="messages" id="messages">
+                <div class="message assistant">
+                    <div class="content">👋 I'm <strong>KAI</strong>, your Kaizen AI Coach. I help you create high-quality improvement event charters.
+
+You can ask me to:
+• <strong>Suggest</strong> — tips for any charter field
+• <strong>Validate</strong> — check your inputs for quality
+• <strong>Review</strong> — score your charter
+• <strong>Search</strong> — find similar past events
+• <strong>Generate</strong> — draft content for you
+
+What would you like to work on?</div>
+                </div>
+            </div>
+
+            <div class="input-area">
+                <textarea id="userInput" placeholder="Ask KAI for help with your charter..." rows="1"></textarea>
+                <button id="sendBtn" onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+
+        <div class="side-panel">
+            <h2>Quick Actions</h2>
+            <div class="quick-actions">
+                <button onclick="quickSend('Help me write a problem statement')">Problem Statement</button>
+                <button onclick="quickSend('What makes a good KPI target?')">KPI Tips</button>
+                <button onclick="quickSend('Review charter charter-001')">Review Charter</button>
+                <button onclick="quickSend('Show me similar past charters')">Find Similar</button>
+                <button onclick="quickSend('What is the 5 Whys technique?')">5 Whys</button>
+                <button onclick="quickSend('Check progress on charter-001')">Check Progress</button>
+            </div>
+
+            <h2>Active Charter</h2>
+            <div class="charter-card" id="charterInfo">
+                <div class="label">No charter selected</div>
+                <div class="value">Use the chat to create or select a charter</div>
+            </div>
+
+            <h2>Connection</h2>
+            <div class="charter-card">
+                <div class="label">Agent Mode</div>
+                <div class="value">
+                    <select id="agentMode" onchange="switchMode()" style="background:var(--surface);color:var(--text);border:1px solid var(--border);padding:4px 8px;border-radius:6px;font-size:0.85rem;">
+                        <option value="foundry">Foundry Prompt Agent</option>
+                        <option value="agui">AG-UI (MAF Direct)</option>
+                    </select>
+                </div>
+                <div class="label" style="margin-top:8px">Endpoint</div>
+                <div class="value" id="endpointDisplay">http://localhost:8001/api/kai/foundry-agent</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8001';
+        let AGENT_ENDPOINT = `${API_BASE}/api/kai/foundry-agent`;
+
+        function switchMode() {
+            const mode = document.getElementById('agentMode').value;
+            if (mode === 'foundry') {
+                AGENT_ENDPOINT = `${API_BASE}/api/kai/foundry-agent`;
+            } else {
+                AGENT_ENDPOINT = `${API_BASE}/api/kai/agent`;
+            }
+            document.getElementById('endpointDisplay').textContent = AGENT_ENDPOINT;
+        }
+
+        const messagesEl = document.getElementById('messages');
+        const userInput = document.getElementById('userInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+
+        let conversationMessages = [];
+        let isStreaming = false;
+
+        // Auto-resize textarea
+        userInput.addEventListener('input', () => {
+            userInput.style.height = 'auto';
+            userInput.style.height = Math.min(userInput.scrollHeight, 120) + 'px';
+        });
+
+        userInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        function quickSend(text) {
+            userInput.value = text;
+            sendMessage();
+        }
+
+        function addMessage(role, content) {
+            const div = document.createElement('div');
+            div.className = `message ${role}`;
+            if (role === 'assistant') {
+                div.innerHTML = `<div class="content">${formatMarkdown(content)}</div>`;
+            } else {
+                div.textContent = content;
+            }
+            messagesEl.appendChild(div);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+            return div;
+        }
+
+        function formatMarkdown(text) {
+            // Basic markdown rendering
+            return text
+                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.+?)\*/g, '<em>$1</em>')
+                .replace(/`(.+?)`/g, '<code>$1</code>')
+                .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+                .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+                .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+                .replace(/^- (.+)$/gm, '• $1')
+                .replace(/^\d+\. (.+)$/gm, (_, p1) => `<li>${p1}</li>`)
+                .replace(/\n/g, '<br>');
+        }
+
+        async function sendMessage() {
+            const text = userInput.value.trim();
+            if (!text || isStreaming) return;
+
+            // Add user message to UI
+            addMessage('user', text);
+            conversationMessages.push({ role: 'user', content: text });
+
+            userInput.value = '';
+            userInput.style.height = 'auto';
+            isStreaming = true;
+            sendBtn.disabled = true;
+            setStatus('streaming');
+
+            // Create assistant message placeholder
+            const assistantDiv = addMessage('assistant', '');
+            const contentDiv = assistantDiv.querySelector('.content');
+            let fullText = '';
+            let toolBadges = '';
+
+            try {
+                const response = await fetch(AGENT_ENDPOINT, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ messages: conversationMessages }),
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        const data = line.slice(6).trim();
+                        if (!data || data === '[DONE]') continue;
+
+                        try {
+                            const event = JSON.parse(data);
+                            handleAgUiEvent(event, contentDiv, assistantDiv);
+                        } catch (e) {
+                            // Non-JSON SSE data, append as text
+                            fullText += data;
+                            contentDiv.innerHTML = formatMarkdown(fullText);
+                        }
+                    }
+                }
+
+                // Save assistant response
+                const finalText = contentDiv.textContent || contentDiv.innerText;
+                conversationMessages.push({ role: 'assistant', content: finalText });
+
+            } catch (err) {
+                contentDiv.innerHTML = `<span style="color:#ef4444">Error: ${err.message}</span>`;
+                setStatus('error');
+            }
+
+            isStreaming = false;
+            sendBtn.disabled = false;
+            setStatus('connected');
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+
+        let currentAssistantText = '';
+        let currentToolBadges = '';
+
+        function handleAgUiEvent(event, contentDiv, messageDiv) {
+            switch (event.type) {
+                case 'RUN_STARTED':
+                    currentAssistantText = '';
+                    currentToolBadges = '';
+                    break;
+
+                case 'TEXT_MESSAGE_CONTENT':
+                    // Delta text streaming
+                    const delta = event.delta || event.content || '';
+                    currentAssistantText += delta;
+                    contentDiv.innerHTML = currentToolBadges + formatMarkdown(currentAssistantText);
+                    messagesEl.scrollTop = messagesEl.scrollHeight;
+                    break;
+
+                case 'TEXT_MESSAGE_START':
+                    currentAssistantText = '';
+                    break;
+
+                case 'TEXT_MESSAGE_END':
+                    // Final render
+                    contentDiv.innerHTML = currentToolBadges + formatMarkdown(currentAssistantText);
+                    break;
+
+                case 'TOOL_CALL_START':
+                    const toolName = event.toolCallName || event.name || 'tool';
+                    currentToolBadges += `<span class="tool-badge active">${toolName}</span>`;
+                    contentDiv.innerHTML = currentToolBadges + formatMarkdown(currentAssistantText);
+                    break;
+
+                case 'TOOL_CALL_END':
+                    // Mark last active badge as done
+                    currentToolBadges = currentToolBadges.replace(
+                        /class="tool-badge active"(?!.*class="tool-badge active")/,
+                        'class="tool-badge done"'
+                    );
+                    contentDiv.innerHTML = currentToolBadges + formatMarkdown(currentAssistantText);
+                    break;
+
+                case 'TOOL_CALL_RESULT':
+                    // Tool completed — check for charter updates
+                    if (event.content) {
+                        try {
+                            const result = JSON.parse(event.content);
+                            if (result.success && result.field) {
+                                updateCharterDisplay(result);
+                            }
+                        } catch (e) { /* ignore parse errors */ }
+                    }
+                    break;
+
+                case 'RUN_FINISHED':
+                    break;
+
+                case 'STATE_SNAPSHOT':
+                case 'STATE_DELTA':
+                    // Shared state updates (future use)
+                    break;
+            }
+        }
+
+        function updateCharterDisplay(result) {
+            const charterInfo = document.getElementById('charterInfo');
+            charterInfo.innerHTML = `
+                <div class="label">Charter: ${result.charter_id}</div>
+                <div class="value"><strong>${result.field}</strong> updated ✓</div>
+            `;
+        }
+
+        function setStatus(state) {
+            const dot = document.getElementById('statusDot');
+            const text = document.getElementById('statusText');
+            switch (state) {
+                case 'connected':
+                    dot.className = 'dot';
+                    text.textContent = 'Connected';
+                    break;
+                case 'streaming':
+                    dot.className = 'dot';
+                    dot.style.background = 'var(--warning)';
+                    text.textContent = 'Streaming...';
+                    break;
+                case 'error':
+                    dot.className = 'dot disconnected';
+                    text.textContent = 'Error';
+                    break;
+            }
+        }
+
+        // Check health on load
+        fetch(`${API_BASE}/health`)
+            .then(r => r.json())
+            .then(() => setStatus('connected'))
+            .catch(() => setStatus('error'));
+    </script>
+</body>
+</html>
