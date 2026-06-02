@@ -5,6 +5,7 @@ using AgentHub.API.services.conversations;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using AgentHub.API.services.session;
+using System.ClientModel;
 using System.ClientModel.Primitives;
 
 namespace AgentHub.API.Agents;

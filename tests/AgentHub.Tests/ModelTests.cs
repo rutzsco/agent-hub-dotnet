@@ -85,6 +85,7 @@ public class CosmosOptionsTests
         Assert.Equal(string.Empty, options.DatabaseName);
         Assert.Equal("conversation-messages", options.ConversationContainerName);
         Assert.Equal("memory-audit", options.MemoryAuditContainerName);
+        Assert.Equal("knowledge-base-chunks", options.KnowledgeBaseContainerName);
     }
 
     [Fact]
@@ -95,12 +96,14 @@ public class CosmosOptionsTests
             AccountEndpoint = "https://example.documents.azure.com:443/",
             DatabaseName = "agent-hub",
             ConversationContainerName = "my-conversations",
-            MemoryAuditContainerName = "my-audit"
+            MemoryAuditContainerName = "my-audit",
+            KnowledgeBaseContainerName = "my-kb"
         };
 
         Assert.Equal("https://example.documents.azure.com:443/", options.AccountEndpoint);
         Assert.Equal("agent-hub", options.DatabaseName);
         Assert.Equal("my-conversations", options.ConversationContainerName);
         Assert.Equal("my-audit", options.MemoryAuditContainerName);
+        Assert.Equal("my-kb", options.KnowledgeBaseContainerName);
     }
 }

@@ -71,9 +71,8 @@ public abstract class CosmosRepositoryBase
             Logger.LogInformation("Ensuring Cosmos DB container '{Container}' exists", ContainerName);
 
             var database = await Client.CreateDatabaseIfNotExistsAsync(DatabaseName, cancellationToken: cancellationToken);
-            var response = await database.Database.CreateContainerIfNotExistsAsync(
-                new ContainerProperties(ContainerName, PartitionKeyPath),
-                cancellationToken: cancellationToken);
+            var properties = CreateContainerProperties();
+            var response = await database.Database.CreateContainerIfNotExistsAsync(properties, cancellationToken: cancellationToken);
 
             Container = response.Container;
             Logger.LogInformation("Cosmos DB container '{Container}' ready", ContainerName);
@@ -83,5 +82,10 @@ public abstract class CosmosRepositoryBase
         {
             _initializationGate.Release();
         }
+    }
+
+    protected virtual ContainerProperties CreateContainerProperties()
+    {
+        return new ContainerProperties(ContainerName, PartitionKeyPath);
     }
 }

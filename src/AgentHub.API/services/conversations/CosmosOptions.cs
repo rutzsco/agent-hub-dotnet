@@ -6,4 +6,5 @@ public sealed class CosmosOptions
     public string DatabaseName { get; init; } = string.Empty;
     public string ConversationContainerName { get; init; } = "conversation-messages";
     public string MemoryAuditContainerName { get; init; } = "memory-audit";
+    public string KnowledgeBaseContainerName { get; init; } = "knowledge-base-chunks";
 }

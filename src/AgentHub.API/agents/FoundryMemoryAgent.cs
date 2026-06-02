@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using AgentHub.API.Services.Skills.Validation;
+using AgentHub.API.services.search;
 using Azure.AI.Projects;
 using Azure.AI.Projects.Agents;
 using Azure.AI.Projects.Memory;
@@ -58,6 +59,11 @@ namespace AgentHub.API.Agents;
 ///   abstraction used for client-side middleware. It is NOT the Azure OpenAI
 ///   /chat/completions REST endpoint. Foundry decides Chat Completions vs.
 ///   Responses API server-side based on the model and tools attached.
+/// </summary>
+/// <summary>
+/// Bundle of Foundry handles required to drive the memory agent end-to-end:
+/// the <see cref="AIAgent"/> wrapper, the underlying <see cref="ChatClientAgent"/> (for session resumption),
+/// the memory store client, and the active store name.
 /// </summary>
 /// <summary>
 /// Bundle of Foundry handles required to drive the memory agent end-to-end:
@@ -263,6 +269,19 @@ public static class FoundryMemoryAgent
     /// </summary>
     public static async Task<FoundryMemoryContext> CreateAsync(Settings settings, ILogger logger)
     {
+        return await CreateAsync(settings, logger, retriever: null);
+    }
+
+    /// <summary>
+    /// Overload that additionally registers the <see cref="LeanKnowledgeTool"/> function tool
+    /// when a <paramref name="retriever"/> is supplied, enabling tool-call RAG over the
+    /// Lean/Kaizen Azure AI Search index.
+    /// </summary>
+    public static async Task<FoundryMemoryContext> CreateAsync(
+        Settings settings,
+        ILogger logger,
+        LeanSearchRetriever? retriever)
+    {
         logger.LogInformation(
             "Initializing Foundry memory agent. Endpoint={Endpoint}, MemoryStore={MemoryStore}, EmbeddingModel={EmbeddingModel}",
             settings.AzureAIProjectEndpoint,
@@ -290,12 +309,17 @@ public static class FoundryMemoryAgent
         var record = await GetOrCreateAgentAsync(client, agentName, settings, logger);
         logger.LogInformation("Foundry memory agent is ready. AgentName={AgentName}", record.Name);
 
-        // RAG over the Lean/Kaizen Azure AI Search index is handled server-side by Foundry
-        // via a knowledge source attached to the agent in the portal. No client-side tools
-        // are registered here.
+        // RAG over the Lean/Kaizen Azure AI Search index can be wired either client-side
+        // (LeanKnowledgeTool function tool) or server-side (knowledge source attached in the
+        // Foundry portal). When a retriever is supplied AND server-side tool mode is off,
+        // register the client-side tool.
+        var tools = retriever is not null && !settings.UseServerSideSearchTool
+            ? new List<AITool> { LeanKnowledgeTool.Create(retriever, settings.AzureSearchTopK) }
+            : new List<AITool>();
+
         var agent = (FoundryAgent)client.AsAIAgent(
             record,
-            [],
+            tools,
             inner => CreateContextProviderChatClient(inner, memoryProvider),
             null);
 

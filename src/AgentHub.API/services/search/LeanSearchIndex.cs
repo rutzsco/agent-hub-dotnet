@@ -13,6 +13,7 @@ public static class LeanSearchIndex
     public const string IndexName = "lean-kaizen-proto";
 
     // Match the embedding model dimensions (text-embedding-3-small = 1536).
+    private const int EmbeddingDimensions = 1536;
     private const string VectorProfileName = "hnsw-cosine";
     private const string VectorAlgorithmName = "hnsw-default";
     private const string VectorizerName = "aoai-embed-small";
@@ -55,7 +56,7 @@ public static class LeanSearchIndex
             });
         }
         else
-        {
+    {
             // No vectorizer — pre-embedded query vectors required at query time.
             vectorSearch.Profiles.Add(new VectorSearchProfile(VectorProfileName, VectorAlgorithmName));
         }

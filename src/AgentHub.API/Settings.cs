@@ -14,8 +14,8 @@ namespace AgentHub.API;
 /// </remarks>
 public class Settings
 {
-    /// <summary>Azure AI project endpoint used by Foundry clients.</summary>
-    public required Uri AzureAIProjectEndpoint { get; init; }
+    /// <summary>Azure AI project endpoint used by Foundry clients. Optional at construction time; required at use via <see cref="RequireAzureAIProjectEndpoint"/>.</summary>
+    public Uri? AzureAIProjectEndpoint { get; init; }
     /// <summary>Optional dedicated Azure OpenAI endpoint for the demo AOAI agent.</summary>
     public Uri? AzureOpenAIEndpoint { get; init; }
     /// <summary>Model deployment name used for chat completions (must exist in the Foundry project).</summary>
@@ -64,6 +64,26 @@ public class Settings
     public string AzureSearchEmbeddingDeployment { get; init; } = "text-embedding-3-small";
     public string AzureSearchEmbeddingModel { get; init; } = "text-embedding-3-small";
     public int AzureSearchEmbeddingDimensions { get; init; } = 1536;
+    /// <summary>Cosmos container for KnowledgeBase PDF chunks and vectors.</summary>
+    public string CosmosKnowledgeBaseContainerName { get; init; } = "knowledge-base-chunks";
+    public int AzureSearchTopK { get; init; } = 5;
+    /// <summary>Azure Blob Storage container URI containing KnowledgeBase source PDFs.</summary>
+    public Uri? KnowledgeBaseBlobContainerUri { get; init; }
+    /// <summary>Optional default blob prefix/folder to index for KnowledgeBase ingestion.</summary>
+    public string? KnowledgeBaseBlobPrefix { get; init; }
+    /// <summary>Azure AI Document Intelligence endpoint used to extract text from PDFs.</summary>
+    public Uri? KnowledgeBaseDocumentIntelligenceEndpoint { get; init; }
+    public int KnowledgeBaseChunkMaxCharacters { get; init; } = 3500;
+    public int KnowledgeBaseChunkOverlapCharacters { get; init; } = 400;
+    public int KnowledgeBaseDefaultMaxFiles { get; init; } = 10;
+    public int KnowledgeBaseMaxChunksPerDocument { get; init; } = 500;
+
+    /// <summary>
+    /// When true, the client-side <c>LeanKnowledgeTool</c> is NOT registered on the agent.
+    /// Use this to demo a Foundry agent that has the Azure AI Search knowledge source
+    /// attached server-side (configured in the Foundry portal). Default: false (client-side tool).
+    /// </summary>
+    public bool UseServerSideSearchTool { get; init; }
 
     /// <summary>
     /// Reads configuration from the <c>AgentHub</c> section (with env-var fallbacks) and builds a populated <see cref="Settings"/>.
@@ -158,6 +178,55 @@ public class Settings
             configuration["COSMOS_MEMORY_AUDIT_CONTAINER_NAME"])
             ?? "memory-audit";
 
+        var cosmosKnowledgeBaseContainerName = GetOptionalValue(
+            cosmosSection["KnowledgeBaseContainerName"],
+            configuration["COSMOS_KNOWLEDGE_BASE_CONTAINER_NAME"])
+            ?? "knowledge-base-chunks";
+
+        var knowledgeBaseSection = agentHubSection.GetSection("KnowledgeBase");
+        var knowledgeBaseBlobContainerUriValue = GetOptionalValue(
+            knowledgeBaseSection["BlobContainerUri"],
+            configuration["KNOWLEDGE_BASE_BLOB_CONTAINER_URI"]);
+        var knowledgeBaseBlobContainerUri = string.IsNullOrWhiteSpace(knowledgeBaseBlobContainerUriValue)
+            ? null
+            : new Uri(knowledgeBaseBlobContainerUriValue);
+
+        var knowledgeBaseBlobPrefix = GetOptionalValue(
+            knowledgeBaseSection["BlobPrefix"],
+            configuration["KNOWLEDGE_BASE_BLOB_PREFIX"]);
+
+        var knowledgeBaseDocumentIntelligenceEndpointValue = GetOptionalValue(
+            knowledgeBaseSection["DocumentIntelligenceEndpoint"],
+            configuration["DOCUMENT_INTELLIGENCE_ENDPOINT"]);
+        var knowledgeBaseDocumentIntelligenceEndpoint = string.IsNullOrWhiteSpace(knowledgeBaseDocumentIntelligenceEndpointValue)
+            ? null
+            : new Uri(knowledgeBaseDocumentIntelligenceEndpointValue);
+
+        var knowledgeBaseChunkMaxCharacters = GetPositiveInt(
+            knowledgeBaseSection["ChunkMaxCharacters"],
+            configuration["KNOWLEDGE_BASE_CHUNK_MAX_CHARACTERS"],
+            3500);
+
+        var knowledgeBaseChunkOverlapCharacters = GetPositiveInt(
+            knowledgeBaseSection["ChunkOverlapCharacters"],
+            configuration["KNOWLEDGE_BASE_CHUNK_OVERLAP_CHARACTERS"],
+            400);
+
+        if (knowledgeBaseChunkOverlapCharacters >= knowledgeBaseChunkMaxCharacters)
+        {
+            knowledgeBaseChunkOverlapCharacters = Math.Max(0, knowledgeBaseChunkMaxCharacters / 10);
+        }
+
+        var knowledgeBaseDefaultMaxFiles = GetPositiveInt(
+            knowledgeBaseSection["DefaultMaxFiles"],
+            configuration["KNOWLEDGE_BASE_DEFAULT_MAX_FILES"],
+            10);
+
+        var knowledgeBaseMaxChunksPerDocument = GetPositiveInt(
+            knowledgeBaseSection["MaxChunksPerDocument"],
+            configuration["KNOWLEDGE_BASE_MAX_CHUNKS_PER_DOCUMENT"],
+            500);
+
         var azureSearchEndpointValue = agentHubSection.GetSection("AzureSearch")["Endpoint"]
             ?? agentHubSection["AzureSearchEndpoint"]
             ?? configuration["AZURE_SEARCH_ENDPOINT"];
@@ -165,17 +234,15 @@ public class Settings
             ? null
             : new Uri(azureSearchEndpointValue);
 
-        var azureSearchEmbeddingDeployment = agentHubSection.GetSection("AzureSearch")["EmbeddingDeployment"]
-            ?? configuration["AZURE_SEARCH_EMBEDDING_DEPLOYMENT"]
-            ?? "text-embedding-3-small";
-        var azureSearchEmbeddingModel = agentHubSection.GetSection("AzureSearch")["EmbeddingModel"]
-            ?? configuration["AZURE_SEARCH_EMBEDDING_MODEL"]
-            ?? "text-embedding-3-small";
-        var azureSearchEmbeddingDimensionsValue = agentHubSection.GetSection("AzureSearch")["EmbeddingDimensions"]
-            ?? configuration["AZURE_SEARCH_EMBEDDING_DIMENSIONS"];
-        var azureSearchEmbeddingDimensions = int.TryParse(azureSearchEmbeddingDimensionsValue, out var parsedDims) && parsedDims > 0
-            ? parsedDims
-            : 1536;
+        var azureSearchTopKValue = agentHubSection.GetSection("AzureSearch")["TopK"]
+            ?? configuration["AZURE_SEARCH_TOP_K"];
+        var azureSearchTopK = int.TryParse(azureSearchTopKValue, out var parsedTopK) && parsedTopK > 0
+            ? parsedTopK
+            : 5;
+
+        var useServerSideSearchToolValue = agentHubSection.GetSection("AzureSearch")["UseServerSideTool"]
+            ?? configuration["AZURE_SEARCH_USE_SERVER_SIDE_TOOL"];
+        var useServerSideSearchTool = bool.TryParse(useServerSideSearchToolValue, out var parsedFlag) && parsedFlag;
 
         return new Settings
         {
@@ -193,16 +260,31 @@ public class Settings
             CosmosDatabaseName = cosmosDatabaseName,
             CosmosConversationContainerName = cosmosConversationContainerName,
             CosmosMemoryAuditContainerName = cosmosMemoryAuditContainerName,
-            AzureSearchEndpoint = azureSearchEndpoint,
-            AzureSearchEmbeddingDeployment = azureSearchEmbeddingDeployment,
-            AzureSearchEmbeddingModel = azureSearchEmbeddingModel,
-            AzureSearchEmbeddingDimensions = azureSearchEmbeddingDimensions
+            CosmosKnowledgeBaseContainerName = cosmosKnowledgeBaseContainerName,
+            AzureSearchEndpoint = azureSearchEndpoint is null ? null : azureSearchEndpoint,
+            AzureSearchTopK = azureSearchTopK,
+            KnowledgeBaseBlobContainerUri = knowledgeBaseBlobContainerUri,
+            KnowledgeBaseBlobPrefix = knowledgeBaseBlobPrefix,
+            KnowledgeBaseDocumentIntelligenceEndpoint = knowledgeBaseDocumentIntelligenceEndpoint,
+            KnowledgeBaseChunkMaxCharacters = knowledgeBaseChunkMaxCharacters,
+            KnowledgeBaseChunkOverlapCharacters = knowledgeBaseChunkOverlapCharacters,
+            KnowledgeBaseDefaultMaxFiles = knowledgeBaseDefaultMaxFiles,
+            KnowledgeBaseMaxChunksPerDocument = knowledgeBaseMaxChunksPerDocument,
+            UseServerSideSearchTool = useServerSideSearchTool
         };
     }
 
     private static string? GetOptionalValue(params string?[] values)
     {
         return values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+    }
+
+    private static int GetPositiveInt(string? sectionValue, string? envValue, int defaultValue)
+    {
+        var value = GetOptionalValue(sectionValue, envValue);
+        return int.TryParse(value, out var parsed) && parsed > 0
+            ? parsed
+            : defaultValue;
     }
 
     public Uri RequireAzureAIProjectEndpoint()

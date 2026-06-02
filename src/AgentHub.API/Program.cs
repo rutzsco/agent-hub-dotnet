@@ -84,5 +84,6 @@ app.UseSwaggerUI(options =>
     options.SwaggerEndpoint("/openapi/v1.json", "AgentHub API");
 });
 app.MapAgentRoutes();
+app.MapKnowledgeBaseRoutes();
 
 app.Run();

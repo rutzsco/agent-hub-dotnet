@@ -1,9 +1,13 @@
 using AgentHub.API.Agents;
 using AgentHub.API.services.conversations;
+using AgentHub.API.Services.KnowledgeBase;
 using AgentHub.API.services.search;
 using AgentHub.API.services.session;
 using AgentHub.API.Services.Memory;
 using AgentHub.API.Services.Skills.Validation;
+using Azure.AI.DocumentIntelligence;
+using Azure.AI.OpenAI;
+using Azure.Storage.Blobs;
 using Azure.Search.Documents.Indexes;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Foundry;
@@ -37,6 +41,7 @@ public static class AgentHubServiceCollectionExtensions
         services.AddAgents(settings);
         services.AddConversationServices(settings);
         services.AddSearchServices(settings);
+        services.AddKnowledgeBaseServices(settings);
         services.AddSkills();
 
         return services;
@@ -111,7 +116,8 @@ public static class AgentHubServiceCollectionExtensions
             AccountEndpoint = settings.CosmosAccountEndpoint ?? string.Empty,
             DatabaseName = settings.CosmosDatabaseName ?? "agent-hub",
             ConversationContainerName = settings.CosmosConversationContainerName,
-            MemoryAuditContainerName = settings.CosmosMemoryAuditContainerName
+            MemoryAuditContainerName = settings.CosmosMemoryAuditContainerName,
+            KnowledgeBaseContainerName = settings.CosmosKnowledgeBaseContainerName
         };
         services.AddSingleton(cosmosOptions);
 
@@ -131,6 +137,61 @@ public static class AgentHubServiceCollectionExtensions
         return services;
     }
 
+    private static IServiceCollection AddKnowledgeBaseServices(this IServiceCollection services, Settings settings)
+    {
+        if (string.IsNullOrWhiteSpace(settings.CosmosAccountEndpoint)
+            || settings.AzureOpenAIEndpoint is null
+            || settings.KnowledgeBaseBlobContainerUri is null
+            || settings.KnowledgeBaseDocumentIntelligenceEndpoint is null)
+        {
+            return services;
+        }
+
+        services.AddSingleton(new KnowledgeBaseOptions(
+            settings.KnowledgeBaseBlobContainerUri,
+            settings.KnowledgeBaseBlobPrefix,
+            settings.KnowledgeBaseChunkMaxCharacters,
+            settings.KnowledgeBaseChunkOverlapCharacters,
+            settings.KnowledgeBaseDefaultMaxFiles,
+            settings.KnowledgeBaseMaxChunksPerDocument));
+
+        services.AddSingleton(sp => new BlobContainerClient(settings.KnowledgeBaseBlobContainerUri, settings.CreateAzureCredential()));
+        services.AddSingleton(sp =>
+        {
+            var intermediaryContainerUri = CreateIntermediaryContainerUri(settings.KnowledgeBaseBlobContainerUri);
+            var containerClient = new BlobContainerClient(intermediaryContainerUri, settings.CreateAzureCredential());
+            var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger<KnowledgeBaseDocumentIntelligenceCache>();
+            return new KnowledgeBaseDocumentIntelligenceCache(containerClient, logger);
+        });
+        services.AddSingleton(sp => new DocumentIntelligenceClient(settings.KnowledgeBaseDocumentIntelligenceEndpoint, settings.CreateAzureCredential()));
+        services.AddSingleton(sp =>
+        {
+            var aoaiClient = new AzureOpenAIClient(settings.AzureOpenAIEndpoint, settings.CreateAzureCredential());
+            return aoaiClient.GetEmbeddingClient(settings.MemoryEmbeddingModel);
+        });
+
+        services.AddSingleton<IKnowledgeBaseRepository, CosmosKnowledgeBaseRepository>();
+        services.AddSingleton<KnowledgeBaseBlobSource>();
+        services.AddSingleton<DocumentIntelligencePdfTextExtractor>();
+        services.AddSingleton<SemanticChunker>();
+        services.AddSingleton<KnowledgeBaseEmbeddingService>();
+        services.AddSingleton<KnowledgeBaseIngestionService>();
+        services.AddSingleton<KnowledgeBaseSearchService>();
+
+        return services;
+    }
+
+    private static Uri CreateIntermediaryContainerUri(Uri sourceContainerUri)
+    {
+        var builder = new BlobUriBuilder(sourceContainerUri)
+        {
+            BlobContainerName = sourceContainerUri.Segments.Last().TrimEnd('/') + "-intermediaries",
+            BlobName = null
+        };
+
+        return builder.ToUri();
+    }
+
     /// <summary>
     /// Registers reusable agent "skills" (e.g., prompt validation) that agents can compose.
     /// </summary>
@@ -142,20 +203,44 @@ public static class AgentHubServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Conditionally registers an Azure AI Search <see cref="SearchIndexClient"/> used at startup
-    /// to ensure the Lean/Kaizen index exists. RAG itself is performed server-side by Foundry,
-    /// so no retriever or function tool is registered here.
+    /// Conditionally registers an Azure AI Search <see cref="SearchIndexClient"/>.
     /// </summary>
+    /// <remarks>
+    /// When <see cref="Settings.AzureSearchEndpoint"/> is not configured, no client is registered
+    /// and <c>GetService&lt;SearchIndexClient&gt;()</c> in <c>Program.cs</c> returns <c>null</c>,
+    /// causing the index-creation step to be skipped gracefully.
+    /// </remarks>
     private static IServiceCollection AddSearchServices(this IServiceCollection services, Settings settings)
     {
+        // Skip registration entirely when the search endpoint isn't configured — the app runs without search.
         if (settings.AzureSearchEndpoint is null)
         {
             return services;
         }
 
+        // Use Settings.CreateAzureCredential() so authentication (DefaultAzureCredential or otherwise)
+        // stays consistent with the rest of the Azure SDK clients in the app.
         services.AddSingleton(_ => new SearchIndexClient(
             settings.AzureSearchEndpoint,
             settings.CreateAzureCredential()));
+
+        // LeanSearchRetriever additionally needs an Azure OpenAI endpoint to embed user queries.
+        // Skip retriever registration (tool-call RAG disabled) when not configured.
+        if (settings.AzureOpenAIEndpoint is not null)
+        {
+            services.AddSingleton(sp =>
+            {
+                var credential = settings.CreateAzureCredential();
+                var aoaiClient = new AzureOpenAIClient(settings.AzureOpenAIEndpoint, credential);
+                var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger<LeanSearchRetriever>();
+                return new LeanSearchRetriever(
+                    settings.AzureSearchEndpoint,
+                    aoaiClient,
+                    settings.MemoryEmbeddingModel,
+                    credential,
+                    logger);
+            });
+        }
 
         return services;
     }
