@@ -59,9 +59,21 @@ public class Settings
     public string CosmosConversationContainerName { get; init; } = "conversation-messages";
     /// <summary>Cosmos container for memory deletion audit entries.</summary>
     public string CosmosMemoryAuditContainerName { get; init; } = "memory-audit";
+    /// <summary>Cosmos container for KnowledgeBase PDF chunks and vectors.</summary>
+    public string CosmosKnowledgeBaseContainerName { get; init; } = "knowledge-base-chunks";
     /// <summary>Azure AI Search endpoint; when null, search index registration is skipped.</summary>
     public Uri? AzureSearchEndpoint { get; init; }
     public int AzureSearchTopK { get; init; } = 5;
+    /// <summary>Azure Blob Storage container URI containing KnowledgeBase source PDFs.</summary>
+    public Uri? KnowledgeBaseBlobContainerUri { get; init; }
+    /// <summary>Optional default blob prefix/folder to index for KnowledgeBase ingestion.</summary>
+    public string? KnowledgeBaseBlobPrefix { get; init; }
+    /// <summary>Azure AI Document Intelligence endpoint used to extract text from PDFs.</summary>
+    public Uri? KnowledgeBaseDocumentIntelligenceEndpoint { get; init; }
+    public int KnowledgeBaseChunkMaxCharacters { get; init; } = 3500;
+    public int KnowledgeBaseChunkOverlapCharacters { get; init; } = 400;
+    public int KnowledgeBaseDefaultMaxFiles { get; init; } = 10;
+    public int KnowledgeBaseMaxChunksPerDocument { get; init; } = 500;
 
     /// <summary>
     /// When true, the client-side <c>LeanKnowledgeTool</c> is NOT registered on the agent.
@@ -163,6 +175,55 @@ public class Settings
             configuration["COSMOS_MEMORY_AUDIT_CONTAINER_NAME"])
             ?? "memory-audit";
 
+        var cosmosKnowledgeBaseContainerName = GetOptionalValue(
+            cosmosSection["KnowledgeBaseContainerName"],
+            configuration["COSMOS_KNOWLEDGE_BASE_CONTAINER_NAME"])
+            ?? "knowledge-base-chunks";
+
+        var knowledgeBaseSection = agentHubSection.GetSection("KnowledgeBase");
+        var knowledgeBaseBlobContainerUriValue = GetOptionalValue(
+            knowledgeBaseSection["BlobContainerUri"],
+            configuration["KNOWLEDGE_BASE_BLOB_CONTAINER_URI"]);
+        var knowledgeBaseBlobContainerUri = string.IsNullOrWhiteSpace(knowledgeBaseBlobContainerUriValue)
+            ? null
+            : new Uri(knowledgeBaseBlobContainerUriValue);
+
+        var knowledgeBaseBlobPrefix = GetOptionalValue(
+            knowledgeBaseSection["BlobPrefix"],
+            configuration["KNOWLEDGE_BASE_BLOB_PREFIX"]);
+
+        var knowledgeBaseDocumentIntelligenceEndpointValue = GetOptionalValue(
+            knowledgeBaseSection["DocumentIntelligenceEndpoint"],
+            configuration["DOCUMENT_INTELLIGENCE_ENDPOINT"]);
+        var knowledgeBaseDocumentIntelligenceEndpoint = string.IsNullOrWhiteSpace(knowledgeBaseDocumentIntelligenceEndpointValue)
+            ? null
+            : new Uri(knowledgeBaseDocumentIntelligenceEndpointValue);
+
+        var knowledgeBaseChunkMaxCharacters = GetPositiveInt(
+            knowledgeBaseSection["ChunkMaxCharacters"],
+            configuration["KNOWLEDGE_BASE_CHUNK_MAX_CHARACTERS"],
+            3500);
+
+        var knowledgeBaseChunkOverlapCharacters = GetPositiveInt(
+            knowledgeBaseSection["ChunkOverlapCharacters"],
+            configuration["KNOWLEDGE_BASE_CHUNK_OVERLAP_CHARACTERS"],
+            400);
+
+        if (knowledgeBaseChunkOverlapCharacters >= knowledgeBaseChunkMaxCharacters)
+        {
+            knowledgeBaseChunkOverlapCharacters = Math.Max(0, knowledgeBaseChunkMaxCharacters / 10);
+        }
+
+        var knowledgeBaseDefaultMaxFiles = GetPositiveInt(
+            knowledgeBaseSection["DefaultMaxFiles"],
+            configuration["KNOWLEDGE_BASE_DEFAULT_MAX_FILES"],
+            10);
+
+        var knowledgeBaseMaxChunksPerDocument = GetPositiveInt(
+            knowledgeBaseSection["MaxChunksPerDocument"],
+            configuration["KNOWLEDGE_BASE_MAX_CHUNKS_PER_DOCUMENT"],
+            500);
+
         var azureSearchEndpointValue = agentHubSection.GetSection("AzureSearch")["Endpoint"]
             ?? agentHubSection["AzureSearchEndpoint"]
             ?? configuration["AZURE_SEARCH_ENDPOINT"];
@@ -196,8 +257,16 @@ public class Settings
             CosmosDatabaseName = cosmosDatabaseName,
             CosmosConversationContainerName = cosmosConversationContainerName,
             CosmosMemoryAuditContainerName = cosmosMemoryAuditContainerName,
+            CosmosKnowledgeBaseContainerName = cosmosKnowledgeBaseContainerName,
             AzureSearchEndpoint = azureSearchEndpoint,
             AzureSearchTopK = azureSearchTopK,
+            KnowledgeBaseBlobContainerUri = knowledgeBaseBlobContainerUri,
+            KnowledgeBaseBlobPrefix = knowledgeBaseBlobPrefix,
+            KnowledgeBaseDocumentIntelligenceEndpoint = knowledgeBaseDocumentIntelligenceEndpoint,
+            KnowledgeBaseChunkMaxCharacters = knowledgeBaseChunkMaxCharacters,
+            KnowledgeBaseChunkOverlapCharacters = knowledgeBaseChunkOverlapCharacters,
+            KnowledgeBaseDefaultMaxFiles = knowledgeBaseDefaultMaxFiles,
+            KnowledgeBaseMaxChunksPerDocument = knowledgeBaseMaxChunksPerDocument,
             UseServerSideSearchTool = useServerSideSearchTool
         };
     }
@@ -205,6 +274,14 @@ public class Settings
     private static string? GetOptionalValue(params string?[] values)
     {
         return values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+    }
+
+    private static int GetPositiveInt(string? sectionValue, string? envValue, int defaultValue)
+    {
+        var value = GetOptionalValue(sectionValue, envValue);
+        return int.TryParse(value, out var parsed) && parsed > 0
+            ? parsed
+            : defaultValue;
     }
 
     public Uri RequireAzureAIProjectEndpoint()

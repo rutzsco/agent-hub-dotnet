@@ -8,6 +8,7 @@ Agent Hub is a .NET 10 minimal API for hosting AI agents using Microsoft Agent F
 - An interactive Event Charter web UI (React via CDN, no build pipeline) that talks to the memory agent
 - Conversation memory using `ConversationId` for demo and foundry-demo endpoints
 - Cosmos DB-backed conversation history persistence and memory deletion audit log
+- KnowledgeBase PDF ingestion from Azure Blob Storage into Cosmos DB vector search
 - Restart-safe conversation rehydration from stored history
 - Tenant-aware authentication via `DefaultAzureCredential` with explicit tenant pinning
 
@@ -77,6 +78,31 @@ For Foundry-managed routes such as `/agents/foundry-demo` and `/agents/foundryMe
 }
 ```
 
+To enable KnowledgeBase indexing and search, configure Cosmos DB, Azure OpenAI embeddings, Blob Storage, and Document Intelligence:
+
+```json
+{
+  "AgentHub": {
+    "AzureOpenAIEndpoint": "https://<openai-resource>.openai.azure.com/",
+    "MemoryEmbeddingModel": "text-embedding-3-small",
+    "Cosmos": {
+      "AccountEndpoint": "https://<cosmos-account>.documents.azure.com:443/",
+      "DatabaseName": "agent-hub",
+      "KnowledgeBaseContainerName": "knowledge-base-chunks"
+    },
+    "KnowledgeBase": {
+      "BlobContainerUri": "https://<storage-account>.blob.core.windows.net/<container>",
+      "BlobPrefix": "internal_docs/",
+      "DocumentIntelligenceEndpoint": "https://<doc-intel-resource>.cognitiveservices.azure.com/"
+    }
+  }
+}
+```
+
+The Cosmos DB account must have NoSQL vector search enabled. The API creates the KnowledgeBase container with a `/content_vector` vector policy using 1536-dimensional `float32` cosine embeddings and a `quantizedFlat` vector index.
+
+Document Intelligence extraction results are cached in a second blob container named after the source container with `-intermediaries` appended. For example, a source container named `knowledge-base` uses `knowledge-base-intermediaries`. The app creates that container on first cache write.
+
 To enable PostgreSQL-backed conversation history, add either a full connection string or the individual PostgreSQL values shown later in this README.
 
 ### 3. Restore and Build
@@ -121,9 +147,29 @@ curl -X POST http://localhost:5023/agents/demo `
 | `POST` | `/agents/demo` | Sends a message to the code-first agent |
 | `POST` | `/agents/foundry-demo` | Sends a message to the Foundry-managed agent |
 | `POST` | `/agents/foundryMemoryAgent` | Sends a message to the Foundry memory-backed agent (`message`, `userId`, `conversationId?`) |
+| `POST` | `/knowledge-base/ingest` | Indexes PDFs from the configured blob container/prefix into Cosmos DB vector storage |
+| `POST` | `/knowledge-base/search` | Runs semantic search over indexed KnowledgeBase chunks |
 | `GET` | `/conversations/{conversationId}/history` | Returns persisted message history for a conversation |
 | `GET` | `/health` | Health check |
 | `GET` | `/swagger` | Swagger UI |
+
+Example KnowledgeBase ingestion request:
+
+```powershell
+curl -X POST http://localhost:5023/knowledge-base/ingest `
+  -H "Content-Type: application/json" `
+  -d '{"blobPrefix":"internal_docs/Chillers/","maxFiles":1,"forceReindex":false}'
+```
+
+With `forceReindex` omitted or `false`, PDFs already indexed with the current blob `LastModified` are skipped. With `forceReindex` set to `true`, matching PDFs are re-chunked, re-embedded, and rewritten even when the vector store is current. In both modes, a valid cached Document Intelligence result is reused when the source PDF path, size, and last-modified timestamp match.
+
+Example KnowledgeBase search request:
+
+```powershell
+curl -X POST http://localhost:5023/knowledge-base/search `
+  -H "Content-Type: application/json" `
+  -d '{"query":"water quality guidelines for chillers","topK":5,"category":"Chillers"}'
+```
 
 ## Common API UI
 

@@ -5,6 +5,7 @@ using AgentHub.API.services.conversations;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using AgentHub.API.services.session;
+using System.ClientModel;
 using System.ClientModel.Primitives;
 
 namespace AgentHub.API.Agents;
@@ -16,6 +17,8 @@ namespace AgentHub.API.Agents;
 /// </summary>
 public static class DemoAzureOpenAIAgent
 {
+    private const string ApimSubscriptionKeyHeaderName = "Ocp-Apim-Subscription-Key";
+
     /// <summary>
     /// Builds an <see cref="AIAgent"/> backed by Azure OpenAI chat completions.
     /// </summary>
@@ -120,6 +123,22 @@ public static class DemoAzureOpenAIAgent
         };
 
         return new ChatMessage(role, message.Content);
+    }
+
+    private static AzureOpenAIClient CreateAzureOpenAIClient(Settings settings, Uri endpoint)
+    {
+        var options = new AzureOpenAIClientOptions();
+        if (!string.IsNullOrWhiteSpace(settings.ApimSubscriptionKey))
+        {
+            options.AddPolicy(new ApimSubscriptionKeyPolicy(settings.ApimSubscriptionKey), PipelinePosition.PerCall);
+        }
+
+        if (!string.IsNullOrWhiteSpace(settings.AzureAIApiKey))
+        {
+            return new AzureOpenAIClient(endpoint, new ApiKeyCredential(settings.AzureAIApiKey), options);
+        }
+
+        return new AzureOpenAIClient(endpoint, settings.CreateAzureCredential(), options);
     }
 
     private sealed class ApimSubscriptionKeyPolicy(string subscriptionKey) : PipelinePolicy

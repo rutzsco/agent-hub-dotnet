@@ -21,7 +21,15 @@ public class SettingsTests
             ["AgentHub:Cosmos:AccountEndpoint"] = "https://example.documents.azure.com:443/",
             ["AgentHub:Cosmos:DatabaseName"] = "agent-hub-db",
             ["AgentHub:Cosmos:ConversationContainerName"] = "conversation-history",
-            ["AgentHub:Cosmos:MemoryAuditContainerName"] = "memory-audit-log"
+            ["AgentHub:Cosmos:MemoryAuditContainerName"] = "memory-audit-log",
+            ["AgentHub:Cosmos:KnowledgeBaseContainerName"] = "kb-chunks",
+            ["AgentHub:KnowledgeBase:BlobContainerUri"] = "https://storage.blob.core.windows.net/kb",
+            ["AgentHub:KnowledgeBase:BlobPrefix"] = "internal_docs/",
+            ["AgentHub:KnowledgeBase:DocumentIntelligenceEndpoint"] = "https://docs.cognitiveservices.azure.com/",
+            ["AgentHub:KnowledgeBase:ChunkMaxCharacters"] = "2500",
+            ["AgentHub:KnowledgeBase:ChunkOverlapCharacters"] = "250",
+            ["AgentHub:KnowledgeBase:DefaultMaxFiles"] = "3",
+            ["AgentHub:KnowledgeBase:MaxChunksPerDocument"] = "80"
         });
 
         var settings = Settings.Load(config);
@@ -38,6 +46,14 @@ public class SettingsTests
         Assert.Equal("agent-hub-db", settings.CosmosDatabaseName);
         Assert.Equal("conversation-history", settings.CosmosConversationContainerName);
         Assert.Equal("memory-audit-log", settings.CosmosMemoryAuditContainerName);
+        Assert.Equal("kb-chunks", settings.CosmosKnowledgeBaseContainerName);
+        Assert.Equal(new Uri("https://storage.blob.core.windows.net/kb"), settings.KnowledgeBaseBlobContainerUri);
+        Assert.Equal("internal_docs/", settings.KnowledgeBaseBlobPrefix);
+        Assert.Equal(new Uri("https://docs.cognitiveservices.azure.com/"), settings.KnowledgeBaseDocumentIntelligenceEndpoint);
+        Assert.Equal(2500, settings.KnowledgeBaseChunkMaxCharacters);
+        Assert.Equal(250, settings.KnowledgeBaseChunkOverlapCharacters);
+        Assert.Equal(3, settings.KnowledgeBaseDefaultMaxFiles);
+        Assert.Equal(80, settings.KnowledgeBaseMaxChunksPerDocument);
     }
 
     [Fact]
@@ -61,6 +77,14 @@ public class SettingsTests
         Assert.Null(settings.CosmosDatabaseName);
         Assert.Equal("conversation-messages", settings.CosmosConversationContainerName);
         Assert.Equal("memory-audit", settings.CosmosMemoryAuditContainerName);
+        Assert.Equal("knowledge-base-chunks", settings.CosmosKnowledgeBaseContainerName);
+        Assert.Null(settings.KnowledgeBaseBlobContainerUri);
+        Assert.Null(settings.KnowledgeBaseBlobPrefix);
+        Assert.Null(settings.KnowledgeBaseDocumentIntelligenceEndpoint);
+        Assert.Equal(3500, settings.KnowledgeBaseChunkMaxCharacters);
+        Assert.Equal(400, settings.KnowledgeBaseChunkOverlapCharacters);
+        Assert.Equal(10, settings.KnowledgeBaseDefaultMaxFiles);
+        Assert.Equal(500, settings.KnowledgeBaseMaxChunksPerDocument);
     }
 
     [Fact]
@@ -91,6 +115,34 @@ public class SettingsTests
         Assert.Equal("agent-hub-memory", settings.MemoryStoreName);
         Assert.Equal("text-embedding-3-small", settings.MemoryEmbeddingModel);
         Assert.Equal("https://env.documents.azure.com:443/", settings.CosmosAccountEndpoint);
+    }
+
+    [Fact]
+    public void Load_KnowledgeBase_FromEnvironmentVariables()
+    {
+        var config = BuildConfig(new Dictionary<string, string?>
+        {
+            ["AZURE_AI_PROJECT_ENDPOINT"] = "https://env.services.ai.azure.com/api/projects/proj1",
+            ["COSMOS_KNOWLEDGE_BASE_CONTAINER_NAME"] = "env-kb",
+            ["KNOWLEDGE_BASE_BLOB_CONTAINER_URI"] = "https://envstorage.blob.core.windows.net/kb",
+            ["KNOWLEDGE_BASE_BLOB_PREFIX"] = "manuals/",
+            ["DOCUMENT_INTELLIGENCE_ENDPOINT"] = "https://env-docs.cognitiveservices.azure.com/",
+            ["KNOWLEDGE_BASE_CHUNK_MAX_CHARACTERS"] = "1200",
+            ["KNOWLEDGE_BASE_CHUNK_OVERLAP_CHARACTERS"] = "100",
+            ["KNOWLEDGE_BASE_DEFAULT_MAX_FILES"] = "4",
+            ["KNOWLEDGE_BASE_MAX_CHUNKS_PER_DOCUMENT"] = "40"
+        });
+
+        var settings = Settings.Load(config);
+
+        Assert.Equal("env-kb", settings.CosmosKnowledgeBaseContainerName);
+        Assert.Equal(new Uri("https://envstorage.blob.core.windows.net/kb"), settings.KnowledgeBaseBlobContainerUri);
+        Assert.Equal("manuals/", settings.KnowledgeBaseBlobPrefix);
+        Assert.Equal(new Uri("https://env-docs.cognitiveservices.azure.com/"), settings.KnowledgeBaseDocumentIntelligenceEndpoint);
+        Assert.Equal(1200, settings.KnowledgeBaseChunkMaxCharacters);
+        Assert.Equal(100, settings.KnowledgeBaseChunkOverlapCharacters);
+        Assert.Equal(4, settings.KnowledgeBaseDefaultMaxFiles);
+        Assert.Equal(40, settings.KnowledgeBaseMaxChunksPerDocument);
     }
 
     [Fact]

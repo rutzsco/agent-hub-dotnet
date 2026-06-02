@@ -1,10 +1,13 @@
 using AgentHub.API.Agents;
 using AgentHub.API.services.conversations;
+using AgentHub.API.Services.KnowledgeBase;
 using AgentHub.API.services.search;
 using AgentHub.API.services.session;
 using AgentHub.API.Services.Memory;
 using AgentHub.API.Services.Skills.Validation;
+using Azure.AI.DocumentIntelligence;
 using Azure.AI.OpenAI;
+using Azure.Storage.Blobs;
 using Azure.Search.Documents.Indexes;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Foundry;
@@ -38,6 +41,7 @@ public static class AgentHubServiceCollectionExtensions
         services.AddAgents(settings);
         services.AddConversationServices(settings);
         services.AddSearchServices(settings);
+        services.AddKnowledgeBaseServices(settings);
         services.AddSkills();
 
         return services;
@@ -112,7 +116,8 @@ public static class AgentHubServiceCollectionExtensions
             AccountEndpoint = settings.CosmosAccountEndpoint ?? string.Empty,
             DatabaseName = settings.CosmosDatabaseName ?? "agent-hub",
             ConversationContainerName = settings.CosmosConversationContainerName,
-            MemoryAuditContainerName = settings.CosmosMemoryAuditContainerName
+            MemoryAuditContainerName = settings.CosmosMemoryAuditContainerName,
+            KnowledgeBaseContainerName = settings.CosmosKnowledgeBaseContainerName
         };
         services.AddSingleton(cosmosOptions);
 
@@ -130,6 +135,61 @@ public static class AgentHubServiceCollectionExtensions
         services.AddSingleton<IConversationSessionManager, ConversationSessionManager>();
 
         return services;
+    }
+
+    private static IServiceCollection AddKnowledgeBaseServices(this IServiceCollection services, Settings settings)
+    {
+        if (string.IsNullOrWhiteSpace(settings.CosmosAccountEndpoint)
+            || settings.AzureOpenAIEndpoint is null
+            || settings.KnowledgeBaseBlobContainerUri is null
+            || settings.KnowledgeBaseDocumentIntelligenceEndpoint is null)
+        {
+            return services;
+        }
+
+        services.AddSingleton(new KnowledgeBaseOptions(
+            settings.KnowledgeBaseBlobContainerUri,
+            settings.KnowledgeBaseBlobPrefix,
+            settings.KnowledgeBaseChunkMaxCharacters,
+            settings.KnowledgeBaseChunkOverlapCharacters,
+            settings.KnowledgeBaseDefaultMaxFiles,
+            settings.KnowledgeBaseMaxChunksPerDocument));
+
+        services.AddSingleton(sp => new BlobContainerClient(settings.KnowledgeBaseBlobContainerUri, settings.CreateAzureCredential()));
+        services.AddSingleton(sp =>
+        {
+            var intermediaryContainerUri = CreateIntermediaryContainerUri(settings.KnowledgeBaseBlobContainerUri);
+            var containerClient = new BlobContainerClient(intermediaryContainerUri, settings.CreateAzureCredential());
+            var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger<KnowledgeBaseDocumentIntelligenceCache>();
+            return new KnowledgeBaseDocumentIntelligenceCache(containerClient, logger);
+        });
+        services.AddSingleton(sp => new DocumentIntelligenceClient(settings.KnowledgeBaseDocumentIntelligenceEndpoint, settings.CreateAzureCredential()));
+        services.AddSingleton(sp =>
+        {
+            var aoaiClient = new AzureOpenAIClient(settings.AzureOpenAIEndpoint, settings.CreateAzureCredential());
+            return aoaiClient.GetEmbeddingClient(settings.MemoryEmbeddingModel);
+        });
+
+        services.AddSingleton<IKnowledgeBaseRepository, CosmosKnowledgeBaseRepository>();
+        services.AddSingleton<KnowledgeBaseBlobSource>();
+        services.AddSingleton<DocumentIntelligencePdfTextExtractor>();
+        services.AddSingleton<SemanticChunker>();
+        services.AddSingleton<KnowledgeBaseEmbeddingService>();
+        services.AddSingleton<KnowledgeBaseIngestionService>();
+        services.AddSingleton<KnowledgeBaseSearchService>();
+
+        return services;
+    }
+
+    private static Uri CreateIntermediaryContainerUri(Uri sourceContainerUri)
+    {
+        var builder = new BlobUriBuilder(sourceContainerUri)
+        {
+            BlobContainerName = sourceContainerUri.Segments.Last().TrimEnd('/') + "-intermediaries",
+            BlobName = null
+        };
+
+        return builder.ToUri();
     }
 
     /// <summary>
