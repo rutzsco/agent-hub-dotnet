@@ -276,3 +276,71 @@ flowchart TD
   (e.g. recommending Problem Statement match KPI Actual).
 - Memory is **per `userId`** via `FoundryMemoryProvider`, independent of which
   intent or which conversation thread is in use.
+
+---
+
+## 6. Lean/Kaizen RAG — Server-Side Retrieval via Foundry Knowledge Source
+
+Retrieval over the `lean-kaizen-proto` Azure AI Search index is performed
+**entirely server-side**. The app provisions the index schema at startup
+(including an `AzureOpenAIVectorizer` that embeds text queries inside Search),
+and the Foundry agent has the Azure AI Search knowledge source attached in the
+portal. The .NET app is never on the hot path for retrieval.
+
+```mermaid
+sequenceDiagram
+    participant App as AgentHub.API (startup)
+    participant Search as Azure AI Search<br/>(lean-kaizen-proto)
+    participant AOAI as Azure OpenAI<br/>(text-embedding-3-small)
+    participant User
+    participant Route as POST /agents/foundryMemoryAgent
+    participant Foundry as Azure AI Foundry<br/>(KAI agent + AI Search knowledge source)
+    participant Model as Foundry-hosted model
+
+    Note over App,Search: One-time at startup (idempotent)
+    App->>Search: CreateOrUpdateIndexAsync(lean-kaizen-proto with AzureOpenAIVectorizer)
+    Search-->>App: index ready
+
+    Note over Foundry,Search: One-time in Foundry portal: attach AI Search knowledge source to the agent
+
+    User->>Route: POST {message, userId, conversationId?}
+    Route->>Foundry: RunAsync(message, session)
+    Foundry->>Model: prompt + history + memory + attached knowledge source
+    Model-->>Foundry: decides retrieval is needed
+
+    Foundry->>Search: text query {search, queryType=hybrid, top=K}
+    Search->>AOAI: embed(query)
+    AOAI-->>Search: query vector (1536-d)
+    Search->>Search: BM25 on content + ANN on contentVector → RRF fuse → top-K
+    Search-->>Foundry: ranked chunks + metadata
+
+    Foundry->>Model: injected passages as grounded context
+    Model-->>Foundry: answer with citations
+    Foundry-->>Route: response
+    Route-->>User: 200 OK {userId, response, conversationId}
+
+    alt index empty or no relevant chunks
+        Search-->>Foundry: 0 results
+        Model-->>Foundry: answer notes "no indexed Lean artifacts matched" and proceeds from memory + user context
+    end
+```
+
+### Identity Boundaries
+
+| Hop | Identity | Role required |
+|---|---|---|
+| App → Azure AI Search (index admin at startup) | App's `DefaultAzureCredential` | `Search Service Contributor` + `Search Index Data Contributor` |
+| Foundry → Azure AI Search (queries) | Foundry project's managed identity | `Search Index Data Reader` |
+| Azure AI Search vectorizer → Azure OpenAI (query embedding) | Search service's managed identity | `Cognitive Services OpenAI User` |
+
+### Notes
+
+- **No client-side retrieval code.** The .NET app only manages the index schema;
+  it does not embed queries or call Search at request time.
+- **Vectorizer is part of the schema.** Adding or changing it requires
+  recreating the index (drop in the Search portal, let startup recreate).
+- **Graceful fallback.** When `AzureSearch:Endpoint` is not configured, the
+  startup index step is skipped and the agent runs without grounding.
+- **Prompt change required to enforce RAG.** The KAI system prompt instructs
+  the agent to use the knowledge source and cite results. A bump of
+  `FoundryAgentName` is needed for any prompt-level change to take effect.

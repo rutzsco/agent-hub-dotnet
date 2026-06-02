@@ -3,8 +3,8 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
-using AgentHub.API.services.search;
 using AgentHub.API.Services.Skills.Validation;
+using AgentHub.API.services.search;
 using Azure.AI.Projects;
 using Azure.AI.Projects.Agents;
 using Azure.AI.Projects.Memory;
@@ -59,6 +59,11 @@ namespace AgentHub.API.Agents;
 ///   abstraction used for client-side middleware. It is NOT the Azure OpenAI
 ///   /chat/completions REST endpoint. Foundry decides Chat Completions vs.
 ///   Responses API server-side based on the model and tools attached.
+/// </summary>
+/// <summary>
+/// Bundle of Foundry handles required to drive the memory agent end-to-end:
+/// the <see cref="AIAgent"/> wrapper, the underlying <see cref="ChatClientAgent"/> (for session resumption),
+/// the memory store client, and the active store name.
 /// </summary>
 /// <summary>
 /// Bundle of Foundry handles required to drive the memory agent end-to-end:
@@ -304,17 +309,13 @@ public static class FoundryMemoryAgent
         var record = await GetOrCreateAgentAsync(client, agentName, settings, logger);
         logger.LogInformation("Foundry memory agent is ready. AgentName={AgentName}", record.Name);
 
-        // Build server-side Foundry agent wrapper and attach FoundryMemoryProvider
-        // via chatClient transform. When a retriever is supplied, register the Lean
-        // knowledge tool so the model can call it for grounded answers (tool-call RAG).
-        var tools = retriever is null
-            ? Array.Empty<AITool>()
-            : new AITool[] { LeanKnowledgeTool.Create(retriever, settings.AzureSearchTopK) };
-
-        if (retriever is not null)
-        {
-            logger.LogInformation("Registering Lean knowledge tool for tool-call RAG. ToolName={ToolName}", LeanKnowledgeTool.ToolName);
-        }
+        // RAG over the Lean/Kaizen Azure AI Search index can be wired either client-side
+        // (LeanKnowledgeTool function tool) or server-side (knowledge source attached in the
+        // Foundry portal). When a retriever is supplied AND server-side tool mode is off,
+        // register the client-side tool.
+        var tools = retriever is not null && !settings.UseServerSideSearchTool
+            ? new List<AITool> { LeanKnowledgeTool.Create(retriever, settings.AzureSearchTopK) }
+            : new List<AITool>();
 
         var agent = (FoundryAgent)client.AsAIAgent(
             record,

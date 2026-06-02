@@ -36,6 +36,31 @@ public static class DemoAzureOpenAIAgent
                 name: "demo-basic-aoai-agent");
     }
 
+    private static AzureOpenAIClient CreateAzureOpenAIClient(Settings settings, Uri endpoint)
+    {
+        var apimSubscriptionKey = settings.ApimSubscriptionKey;
+        var keyToUse = string.IsNullOrWhiteSpace(settings.AzureAIApiKey)
+            ? apimSubscriptionKey
+            : settings.AzureAIApiKey;
+
+        if (string.IsNullOrWhiteSpace(keyToUse))
+        {
+            return new AzureOpenAIClient(endpoint, new DefaultAzureCredential());
+        }
+
+        if (string.IsNullOrWhiteSpace(apimSubscriptionKey))
+        {
+            return new AzureOpenAIClient(endpoint, new AzureKeyCredential(keyToUse));
+        }
+
+        var options = new AzureOpenAIClientOptions();
+        options.AddPolicy(
+            new ApimSubscriptionKeyPolicy(apimSubscriptionKey),
+            PipelinePosition.PerCall);
+
+        return new AzureOpenAIClient(endpoint, new AzureKeyCredential(keyToUse), options);
+    }
+
     /// <summary>
     /// Validates input, runs the agent within a managed session, persists the turn, and returns the assistant reply.
     /// </summary>
@@ -123,22 +148,6 @@ public static class DemoAzureOpenAIAgent
         };
 
         return new ChatMessage(role, message.Content);
-    }
-
-    private static AzureOpenAIClient CreateAzureOpenAIClient(Settings settings, Uri endpoint)
-    {
-        var options = new AzureOpenAIClientOptions();
-        if (!string.IsNullOrWhiteSpace(settings.ApimSubscriptionKey))
-        {
-            options.AddPolicy(new ApimSubscriptionKeyPolicy(settings.ApimSubscriptionKey), PipelinePosition.PerCall);
-        }
-
-        if (!string.IsNullOrWhiteSpace(settings.AzureAIApiKey))
-        {
-            return new AzureOpenAIClient(endpoint, new ApiKeyCredential(settings.AzureAIApiKey), options);
-        }
-
-        return new AzureOpenAIClient(endpoint, settings.CreateAzureCredential(), options);
     }
 
     private sealed class ApimSubscriptionKeyPolicy(string subscriptionKey) : PipelinePolicy

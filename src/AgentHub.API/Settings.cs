@@ -14,8 +14,8 @@ namespace AgentHub.API;
 /// </remarks>
 public class Settings
 {
-    /// <summary>Azure AI project endpoint used by Foundry clients.</summary>
-    public required Uri AzureAIProjectEndpoint { get; init; }
+    /// <summary>Azure AI project endpoint used by Foundry clients. Optional at construction time; required at use via <see cref="RequireAzureAIProjectEndpoint"/>.</summary>
+    public Uri? AzureAIProjectEndpoint { get; init; }
     /// <summary>Optional dedicated Azure OpenAI endpoint for the demo AOAI agent.</summary>
     public Uri? AzureOpenAIEndpoint { get; init; }
     /// <summary>Model deployment name used for chat completions (must exist in the Foundry project).</summary>
@@ -59,10 +59,13 @@ public class Settings
     public string CosmosConversationContainerName { get; init; } = "conversation-messages";
     /// <summary>Cosmos container for memory deletion audit entries.</summary>
     public string CosmosMemoryAuditContainerName { get; init; } = "memory-audit";
-    /// <summary>Cosmos container for KnowledgeBase PDF chunks and vectors.</summary>
-    public string CosmosKnowledgeBaseContainerName { get; init; } = "knowledge-base-chunks";
     /// <summary>Azure AI Search endpoint; when null, search index registration is skipped.</summary>
     public Uri? AzureSearchEndpoint { get; init; }
+    public string AzureSearchEmbeddingDeployment { get; init; } = "text-embedding-3-small";
+    public string AzureSearchEmbeddingModel { get; init; } = "text-embedding-3-small";
+    public int AzureSearchEmbeddingDimensions { get; init; } = 1536;
+    /// <summary>Cosmos container for KnowledgeBase PDF chunks and vectors.</summary>
+    public string CosmosKnowledgeBaseContainerName { get; init; } = "knowledge-base-chunks";
     public int AzureSearchTopK { get; init; } = 5;
     /// <summary>Azure Blob Storage container URI containing KnowledgeBase source PDFs.</summary>
     public Uri? KnowledgeBaseBlobContainerUri { get; init; }
@@ -258,7 +261,7 @@ public class Settings
             CosmosConversationContainerName = cosmosConversationContainerName,
             CosmosMemoryAuditContainerName = cosmosMemoryAuditContainerName,
             CosmosKnowledgeBaseContainerName = cosmosKnowledgeBaseContainerName,
-            AzureSearchEndpoint = azureSearchEndpoint,
+            AzureSearchEndpoint = azureSearchEndpoint is null ? null : azureSearchEndpoint,
             AzureSearchTopK = azureSearchTopK,
             KnowledgeBaseBlobContainerUri = knowledgeBaseBlobContainerUri,
             KnowledgeBaseBlobPrefix = knowledgeBaseBlobPrefix,
