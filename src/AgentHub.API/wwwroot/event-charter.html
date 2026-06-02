@@ -722,7 +722,7 @@
       );
     }
 
-    function Field({ field, value, onChange, onAskAi, onReview, asking, reviewing }) {
+    function Field({ field, value, onChange, onReview, reviewing }) {
       const labelText = field.label.toUpperCase();
       return (
         <div className="field-block">
@@ -740,15 +740,6 @@
                   {reviewing ? '… Reviewing' : '💡 Review'}
                 </button>
               )}
-              <button
-                type="button"
-                className="ask-pill"
-                disabled={asking}
-                onClick={() => onAskAi(field)}
-                title="Ask the AI assistant about this field"
-              >
-                {asking ? '… Asking' : '✨ Ask AI'}
-              </button>
             </span>
           </label>
           {field.kind === 'textarea' ? (
@@ -760,9 +751,16 @@
       );
     }
 
-    function MainPanel({ section, sectionIndex, values, onFieldChange, onAskAi, onReview, askingFieldId, reviewingFieldId, onPrev, onNext, prevLabel, nextLabel }) {
+    function MainPanel({ section, sectionIndex, values, onFieldChange, onReview, reviewingFieldId, onPrev, onNext, prevLabel, nextLabel, onAskAiCurrentSection, aiLoading, sectionStatus }) {
       const fullFields = section.fields.filter(f => f.full);
       const gridFields = section.fields.filter(f => !f.full);
+      const askLabel = aiLoading
+        ? '… Asking agent'
+        : sectionStatus.emptyCount === 0
+          ? `💡 Review ${section.title}`
+          : sectionStatus.filledCount === 0
+            ? `✨ Help me start ${section.title}`
+            : `✨ Help with next field (${sectionStatus.emptyCount} left)`;
       return (
         <section className="main">
           <header className="topbar">
@@ -771,7 +769,14 @@
             <span className="sep">|</span>
             <span className="crumb">Untitled Charter</span>
             <div className="spacer" />
-            <button className="btn btn-primary btn-icon">⬇ Export PDF</button>
+            <button
+              className="btn btn-primary btn-icon"
+              onClick={onAskAiCurrentSection}
+              disabled={aiLoading}
+              title="Ask the AI assistant for help on this section"
+            >
+              {askLabel}
+            </button>
             <button className="icon-close" aria-label="Close">✕</button>
           </header>
 
@@ -789,9 +794,7 @@
                 field={f}
                 value={values[f.id]}
                 onChange={onFieldChange}
-                onAskAi={onAskAi}
                 onReview={onReview}
-                asking={askingFieldId === f.id}
                 reviewing={reviewingFieldId === f.id}
               />
             ))}
@@ -804,9 +807,7 @@
                     field={f}
                     value={values[f.id]}
                     onChange={onFieldChange}
-                    onAskAi={onAskAi}
                     onReview={onReview}
-                    asking={askingFieldId === f.id}
                     reviewing={reviewingFieldId === f.id}
                   />
                 ))}
@@ -836,7 +837,7 @@
       );
     }
 
-    function Assistant({ section, values, totalPercent, filledCount, totalCount, userId, onUserIdChange, aiState, onAskAiCurrentSection, onApplySuggestion, chatState, onChatSend }) {
+    function Assistant({ section, values, totalPercent, filledCount, totalCount, userId, onUserIdChange, aiState, onAskAiCurrentSection, onApplySuggestion, chatState, onChatSend, sectionStatus }) {
       const [tab, setTab] = useState('ai');
       const [subTab, setSubTab] = useState('tips');
       const [chatDraft, setChatDraft] = useState('');
@@ -920,26 +921,16 @@
                 <div className="field-info" style={{ marginTop: 10 }}>
                   <h5>FOUNDRY MEMORY AGENT</h5>
                   <p>
-                    Click <b>✨ Ask AI</b> next to any field, or use the button below
-                    to get suggestions for the current section. Uses
-                    <code> POST /agents/foundryMemoryAgent</code>.
+                    Use the <b>Ask AI</b> button at the top of the page to get section-aware
+                    guidance. The agent sees which fields are filled and which are still empty.
+                    Uses <code>POST /agents/foundryMemoryAgent</code>.
                   </p>
-                </div>
-                <div style={{ padding: '0 16px 8px' }}>
-                  <button
-                    className="btn btn-primary btn-icon"
-                    onClick={onAskAiCurrentSection}
-                    disabled={aiState.loading}
-                    style={{ width: '100%' }}
-                  >
-                    {aiState.loading ? '… Asking agent' : `✨ Suggest tips for ${section.title}`}
-                  </button>
                 </div>
                 <div className="tips-list">
                   {aiState.error && <div className="ai-error">{aiState.error}</div>}
                   {!aiState.error && !aiState.response && !aiState.loading && (
                     <div className="ai-empty">
-                      No agent response yet. Use “Ask AI” on a field or the button above.
+                      No agent response yet. Click the <b>Ask AI</b> button at the top of the page.
                     </div>
                   )}
                   {aiState.response && (
@@ -1074,12 +1065,46 @@
     }
 
     function buildSectionPrompt(section, values, userMessage = '') {
+      // Tell the agent which fields are filled vs. empty so it can guide the user to the
+      // next missing field instead of re-suggesting content for ones already populated.
+      const filledFields = [];
+      const emptyFields = [];
+      section.fields.forEach(f => {
+        const v = values[f.id];
+        if (typeof v === 'string' && v.trim().length > 0) {
+          filledFields.push({ id: f.id, label: f.label });
+        } else {
+          emptyFields.push({ id: f.id, label: f.label });
+        }
+      });
+
+      // Intent selection:
+      //  - explicit user message -> freeform
+      //  - all fields filled     -> section_review (run the rubric on what's there)
+      //  - some/none filled      -> field_help, targeted at the first empty field
+      let intent;
+      let field = null;
+      if (userMessage) {
+        intent = 'freeform';
+      } else if (emptyFields.length === 0) {
+        intent = 'section_review';
+      } else {
+        intent = 'field_help';
+        field = emptyFields[0];
+      }
+
       return JSON.stringify({
-        intent: userMessage ? 'freeform' : 'section_review',
+        intent,
         section: { id: section.id, title: section.title },
-        field: null,
-        currentValue: '',
+        field,
+        currentValue: field ? (values[field.id] ?? '') : '',
         sectionValues: buildSectionValues(section, values),
+        sectionStatus: {
+          filledFields,
+          emptyFields,
+          filledCount: filledFields.length,
+          totalCount: section.fields.length,
+        },
         userMessage,
       });
     }
@@ -1152,8 +1177,8 @@
       if (!primary && alternatives.length === 0) return null;
       const canApply = !!fieldId;
       const applyTitle = canApply
-        ? 'Replace the field value with this suggestion'
-        : 'Open a specific field via "✨ Ask AI" to apply this suggestion';
+        ? 'Paste this suggestion into the next empty field of the current section'
+        : 'Every field in this section is already filled — nothing to apply to';
       return (
         <div className="suggestion-list">
           {primary && (
@@ -1238,15 +1263,6 @@
         }
       };
 
-      const handleAskAiForField = (field) => {
-        askAgent({
-          prompt: buildFieldPrompt(section, field, values),
-          fieldLabel: field.label,
-          fieldId: field.id,
-          mode: 'ask',
-        });
-      };
-
       const handleReviewField = (field) => {
         askAgent({
           prompt: buildReviewPrompt(section, field, values),
@@ -1256,11 +1272,31 @@
         });
       };
 
+      const sectionStatus = React.useMemo(() => {
+        const filled = [];
+        const empty = [];
+        section.fields.forEach(f => {
+          const v = values[f.id];
+          if (typeof v === 'string' && v.trim().length > 0) filled.push(f);
+          else empty.push(f);
+        });
+        return {
+          filledFields: filled,
+          emptyFields: empty,
+          filledCount: filled.length,
+          emptyCount: empty.length,
+          totalCount: section.fields.length,
+          nextEmpty: empty[0] ?? null,
+        };
+      }, [section, values]);
+
       const handleAskAiForSection = () => {
+        // The next empty field (if any) becomes the implicit target so the user can
+        // apply the suggestion directly to the right input.
         askAgent({
           prompt: buildSectionPrompt(section, values),
-          fieldLabel: section.title,
-          fieldId: null,
+          fieldLabel: sectionStatus.nextEmpty?.label ?? section.title,
+          fieldId: sectionStatus.nextEmpty?.id ?? null,
           mode: 'ask',
         });
       };
@@ -1335,14 +1371,15 @@
             sectionIndex={sectionIndex}
             values={values}
             onFieldChange={handleFieldChange}
-            onAskAi={handleAskAiForField}
             onReview={handleReviewField}
-            askingFieldId={askingFieldId}
             reviewingFieldId={reviewingFieldId}
             onPrev={() => goTo(sectionIndex - 1)}
             onNext={() => goTo(sectionIndex + 1)}
             prevLabel={SECTIONS[sectionIndex - 1]?.title}
             nextLabel={SECTIONS[sectionIndex + 1]?.title}
+            onAskAiCurrentSection={handleAskAiForSection}
+            aiLoading={aiState.loading}
+            sectionStatus={sectionStatus}
           />
           <Assistant
             section={section}
@@ -1359,6 +1396,7 @@
             }}
             chatState={chatState}
             onChatSend={handleChatSend}
+            sectionStatus={sectionStatus}
           />
         </div>
       );
